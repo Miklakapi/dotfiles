@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+
+set -e
+
+port="$1"
+
+show_usage() {
+    echo "Usage: kill-port <port>"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+get_port_pids() {
+    local port="$1"
+
+    if ! command_exists lsof; then
+        echo "lsof is required"
+        return 1
+    fi
+
+    lsof -ti ":$port" || true
+}
+
+kill_port() {
+    local port="$1"
+    local pids=""
+
+    if [[ -z "$port" ]]; then
+        show_usage
+        return 1
+    fi
+
+    pids="$(get_port_pids "$port")"
+
+    if [[ -z "$pids" ]]; then
+        echo "No process found on port $port"
+        return
+    fi
+
+    echo "Killing processes on port $port:"
+    echo "$pids"
+
+    echo "$pids" | xargs kill -9
+}
+
+kill_port "$port"
