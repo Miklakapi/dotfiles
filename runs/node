@@ -19,22 +19,26 @@ install_fnm() {
     fi
 
     if command_exists apt; then
-        curl -fsSL https://fnm.vercel.app/install | bash
+        sudo apt update
+        sudo apt install -y curl unzip libatomic1
+        curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell
     fi
 }
 
 configure_fnm_shell() {
     local zshrc="$HOME/.zshrc"
-    local line='eval "$(fnm env --use-on-cd)"'
+    local env_line='eval "$(fnm env --use-on-cd)"'
+    local linux_path_line='export PATH="$HOME/.local/share/fnm:$PATH"'
 
     touch "$zshrc"
 
-    if grep -Fxq "$line" "$zshrc"; then
-        echo "fnm is already configured in .zshrc"
-        return
+    if command_exists apt && ! grep -Fxq "$linux_path_line" "$zshrc"; then
+        echo "$linux_path_line" >> "$zshrc"
     fi
 
-    echo "$line" >> "$zshrc"
+    if ! grep -Fxq "$env_line" "$zshrc"; then
+        echo "$env_line" >> "$zshrc"
+    fi
 }
 
 load_fnm() {
