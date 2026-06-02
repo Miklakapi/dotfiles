@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+set -e
+
+nvim_config_repo="https://github.com/Miklakapi/nvim-config.git"
+nvim_config_dir="$HOME/.config/nvim"
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+install_brew_package() {
+    local package="$1"
+
+    if brew list "$package" >/dev/null 2>&1; then
+        echo "$package is already installed"
+        return
+    fi
+
+    brew install "$package"
+}
+
+install_apt_package() {
+    local package="$1"
+
+    if dpkg -s "$package" >/dev/null 2>&1; then
+        echo "$package is already installed"
+        return
+    fi
+
+    sudo apt install -y "$package"
+}
+
+check_git() {
+    if command_exists git; then
+        return 0
+    fi
+
+    echo "git is required for nvim config"
+    return 1
+}
+
+install_nvim_dependencies_macos() {
+    if ! command_exists brew; then
+        return
+    fi
+
+    install_brew_package "neovim"
+    install_brew_package "ripgrep"
+    install_brew_package "fd"
+    install_brew_package "tree-sitter"
+    install_brew_package "tree-sitter-cli"
+}
+
+install_nvim_dependencies_ubuntu() {
+    if ! command_exists apt; then
+        return
+    fi
+
+    install_apt_package "neovim"
+    install_apt_package "curl"
+    install_apt_package "build-essential"
+    install_apt_package "ripgrep"
+    install_apt_package "fd-find"
+    install_apt_package "tree-sitter-cli"
+
+    if command_exists fdfind && ! command_exists fd; then
+        mkdir -p "$HOME/.local/bin"
+        ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+    fi
+}
+
+install_nvim_dependencies() {
+    install_nvim_dependencies_macos
+    install_nvim_dependencies_ubuntu
+}
+
+install_nvim_config() {
+    mkdir -p "$HOME/.config"
+
+    if [[ -d "$nvim_config_dir/.git" ]]; then
+        echo "nvim config is already installed"
+        git -C "$nvim_config_dir" pull
+        return
+    fi
+
+    if [[ -d "$nvim_config_dir" ]]; then
+        echo "$nvim_config_dir already exists and is not a git repository"
+        return
+    fi
+
+    git clone "$nvim_config_repo" "$nvim_config_dir"
+}
+
+check_git
+install_nvim_dependencies
+install_nvim_config
