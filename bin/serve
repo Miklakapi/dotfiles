@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+
+set -e
+
+path="${1:-.}"
+port="${2:-8000}"
+
+show_usage() {
+    echo "Usage: serve [path] [port]"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+serve_path() {
+    local path="$1"
+    local port="$2"
+
+    if [[ "$path" == "-h" ]] || [[ "$path" == "--help" ]]; then
+        show_usage
+        return
+    fi
+
+    if [[ ! -e "$path" ]]; then
+        echo "Path does not exist: $path"
+        return 1
+    fi
+
+    if [[ -f "$path" ]]; then
+        path="$(dirname "$path")"
+    fi
+
+    if command_exists uv; then
+        echo "Serving $path at http://localhost:$port"
+        cd "$path"
+        uv run python -m http.server "$port"
+        return
+    fi
+
+    if command_exists python3; then
+        echo "Serving $path at http://localhost:$port"
+        cd "$path"
+        python3 -m http.server "$port"
+        return
+    fi
+
+    echo "uv or python3 is required"
+    return 1
+}
+
+serve_path "$path" "$port"

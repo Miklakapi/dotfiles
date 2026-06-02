@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+set -e
+
+port="$1"
+
+show_usage() {
+    echo "Usage: port-info <port>"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+show_port_info() {
+    local port="$1"
+
+    if [[ -z "$port" ]]; then
+        show_usage
+        return 1
+    fi
+
+    if ! command_exists lsof; then
+        echo "lsof is required"
+        return 1
+    fi
+
+    printf "%-8s %-10s %-14s %-14s %s\n" "PORT" "PID" "COMMAND" "ADDRESS" "USER"
+
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN | awk -v port="$port" '
+        NR > 1 {
+            printf "%-8s %-10s %-14s %-14s %s\n", port, $2, $1, $9, $3
+        }
+    '
+}
+
+show_port_info "$port"
