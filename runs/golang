@@ -3,8 +3,6 @@
 set -e
 
 go_version="1.26.3"
-go_tarball="go${go_version}.linux-amd64.tar.gz"
-go_url="https://go.dev/dl/${go_tarball}"
 
 command_exists() {
     command -v "$1" >/dev/null 2>&1
@@ -12,6 +10,22 @@ command_exists() {
 
 is_macos() {
     [[ "$(uname -s)" == "Darwin" ]]
+}
+
+get_linux_arch() {
+    local arch
+
+    arch="$(uname -m)"
+
+    if [[ "$arch" == "x86_64" ]]; then
+        echo "amd64"
+        return
+    fi
+
+    if [[ "$arch" == "aarch64" ]] || [[ "$arch" == "arm64" ]]; then
+        echo "arm64"
+        return
+    fi
 }
 
 install_go_macos() {
@@ -27,6 +41,10 @@ install_go_macos() {
 }
 
 install_go_ubuntu() {
+    local arch
+    local go_tarball
+    local go_url
+
     if command_exists go; then
         echo "go is already installed"
         go version
@@ -37,6 +55,16 @@ install_go_ubuntu() {
         return
     fi
 
+    arch="$(get_linux_arch)"
+
+    if [[ -z "$arch" ]]; then
+        return
+    fi
+
+    go_tarball="go${go_version}.linux-${arch}.tar.gz"
+    go_url="https://go.dev/dl/${go_tarball}"
+
+    sudo apt update
     sudo apt install -y curl tar
     curl -fsSL "$go_url" -o "/tmp/$go_tarball"
 
