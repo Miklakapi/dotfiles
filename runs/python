@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+set -e
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+install_uv() {
+    if command_exists uv; then
+        echo "uv is already installed"
+        uv --version
+        return
+    fi
+
+    if ! command_exists curl; then
+        if command_exists apt; then
+            sudo apt install -y curl
+        else
+            return
+        fi
+    fi
+
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+}
+
+load_uv() {
+    export PATH="$HOME/.local/bin:$PATH"
+}
+
+configure_uv_shell() {
+    local zshrc="$HOME/.zshrc"
+    local line='source "$HOME/.local/bin/env"'
+
+    touch "$zshrc"
+
+    if grep -Fxq "$line" "$zshrc"; then
+        echo "uv is already configured in .zshrc"
+        return
+    fi
+
+    echo "$line" >> "$zshrc"
+}
+
+install_python() {
+    if ! command_exists uv; then
+        return
+    fi
+
+    uv python install
+}
+
+install_uv
+load_uv
+configure_uv_shell
+install_python

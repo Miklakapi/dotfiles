@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+set -e
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+install_git() {
+    if command_exists git; then
+        echo "git is already installed"
+        git --version
+        return
+    fi
+
+    if command_exists brew; then
+        brew install git
+        return
+    fi
+
+    if command_exists apt; then
+        sudo apt install -y git
+    fi
+}
+
+ask_git_config() {
+    local key="$1"
+    local label="$2"
+    local current_value=""
+    local new_value=""
+
+    current_value="$(git config --global --get "$key" || true)"
+
+    if [[ -n "$current_value" ]]; then
+        echo "$key is already set to: $current_value"
+        return
+    fi
+
+    read -r -p "$label: " new_value
+
+    if [[ -z "$new_value" ]]; then
+        return
+    fi
+
+    git config --global "$key" "$new_value"
+}
+
+configure_git() {
+    if ! command_exists git; then
+        return
+    fi
+
+    git config --global pull.rebase true
+
+    ask_git_config "user.name" "Git user name"
+    ask_git_config "user.email" "Git user email"
+}
+
+install_git
+configure_git

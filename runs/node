@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+set -e
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+install_fnm() {
+    if command_exists fnm; then
+        echo "fnm is already installed"
+        fnm --version
+        return
+    fi
+
+    if command_exists brew; then
+        brew install fnm
+        return
+    fi
+
+    if command_exists apt; then
+        curl -fsSL https://fnm.vercel.app/install | bash
+    fi
+}
+
+configure_fnm_shell() {
+    local zshrc="$HOME/.zshrc"
+    local line='eval "$(fnm env --use-on-cd)"'
+
+    touch "$zshrc"
+
+    if grep -Fxq "$line" "$zshrc"; then
+        echo "fnm is already configured in .zshrc"
+        return
+    fi
+
+    echo "$line" >> "$zshrc"
+}
+
+load_fnm() {
+    if ! command_exists fnm; then
+        export PATH="$HOME/.local/share/fnm:$PATH"
+    fi
+
+    if command_exists fnm; then
+        eval "$(fnm env --use-on-cd)"
+    fi
+}
+
+install_node() {
+    if ! command_exists fnm; then
+        return
+    fi
+
+    fnm install --latest
+    fnm default latest
+}
+
+install_fnm
+configure_fnm_shell
+load_fnm
+install_node

@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+set -e
+
+go_version="1.26.3"
+go_tarball="go${go_version}.linux-amd64.tar.gz"
+go_url="https://go.dev/dl/${go_tarball}"
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+is_macos() {
+    [[ "$(uname -s)" == "Darwin" ]]
+}
+
+install_go_macos() {
+    if command_exists go; then
+        echo "go is already installed"
+        go version
+        return
+    fi
+
+    if command_exists brew; then
+        brew install go
+    fi
+}
+
+install_go_ubuntu() {
+    if command_exists go; then
+        echo "go is already installed"
+        go version
+        return
+    fi
+
+    if ! command_exists apt; then
+        return
+    fi
+
+    sudo apt install -y curl tar
+    curl -fsSL "$go_url" -o "/tmp/$go_tarball"
+
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf "/tmp/$go_tarball"
+}
+
+configure_go_shell() {
+    local zshrc="$HOME/.zshrc"
+    local go_root_line='export PATH="/usr/local/go/bin:$PATH"'
+    local go_bin_line='export PATH="$HOME/go/bin:$PATH"'
+
+    touch "$zshrc"
+
+    if ! grep -Fxq "$go_root_line" "$zshrc"; then
+        echo "$go_root_line" >> "$zshrc"
+    fi
+
+    if ! grep -Fxq "$go_bin_line" "$zshrc"; then
+        echo "$go_bin_line" >> "$zshrc"
+    fi
+}
+
+load_go() {
+    export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
+}
+
+install_go() {
+    if is_macos; then
+        install_go_macos
+        return
+    fi
+
+    install_go_ubuntu
+    configure_go_shell
+    load_go
+}
+
+install_go
+
+if command_exists go; then
+    go version
+fi

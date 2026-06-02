@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+
+set -e
+
+font_name="JetBrainsMono"
+font_version="v3.4.0"
+font_dir="$HOME/.local/share/fonts"
+font_zip="/tmp/JetBrainsMono.zip"
+font_url="https://github.com/ryanoasis/nerd-fonts/releases/download/$font_version/JetBrainsMono.zip"
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+install_fonts_macos() {
+    if ! command_exists brew; then
+        return
+    fi
+
+    if brew list --cask font-jetbrains-mono-nerd-font >/dev/null 2>&1; then
+        echo "JetBrains Mono Nerd Font is already installed"
+        return
+    fi
+
+    brew install --cask font-jetbrains-mono-nerd-font
+}
+
+install_fonts_linux() {
+    if ! command_exists apt; then
+        return
+    fi
+
+    if fc-list | grep -qi "JetBrainsMono Nerd Font"; then
+        echo "JetBrains Mono Nerd Font is already installed"
+        return
+    fi
+
+    sudo apt install -y curl unzip fontconfig
+
+    mkdir -p "$font_dir"
+    curl -fsSL "$font_url" -o "$font_zip"
+    unzip -o "$font_zip" -d "$font_dir"
+    fc-cache -fv
+}
+
+install_fonts() {
+    install_fonts_macos
+    install_fonts_linux
+}
+
+install_fonts
