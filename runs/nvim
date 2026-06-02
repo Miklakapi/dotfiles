@@ -9,6 +9,22 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+get_linux_arch() {
+    local arch
+
+    arch="$(uname -m)"
+
+    if [[ "$arch" == "x86_64" ]]; then
+        echo "x86_64"
+        return
+    fi
+
+    if [[ "$arch" == "aarch64" ]] || [[ "$arch" == "arm64" ]]; then
+        echo "arm64"
+        return
+    fi
+}
+
 install_brew_package() {
     local package="$1"
 
@@ -40,6 +56,65 @@ check_git() {
     return 1
 }
 
+install_neovim_linux() {
+    local arch
+    local nvim_url
+    local nvim_file
+
+    arch="$(get_linux_arch)"
+
+    if [[ -z "$arch" ]]; then
+        return
+    fi
+
+    nvim_file="nvim-linux-${arch}.tar.gz"
+    nvim_url="https://github.com/neovim/neovim/releases/latest/download/${nvim_file}"
+
+    curl -fsSL "$nvim_url" -o "/tmp/$nvim_file"
+
+    sudo rm -rf /opt/nvim
+    sudo mkdir -p /opt/nvim
+    sudo tar -C /opt/nvim --strip-components=1 -xzf "/tmp/$nvim_file"
+    sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
+}
+
+install_tree_sitter_cli_linux() {
+    local arch
+    local tree_sitter_arch
+    local tree_sitter_file
+    local tree_sitter_url
+
+    if command_exists tree-sitter; then
+        echo "tree-sitter is already installed"
+        tree-sitter --version
+        return
+    fi
+
+    arch="$(get_linux_arch)"
+
+    if [[ -z "$arch" ]]; then
+        return
+    fi
+
+    tree_sitter_arch="$arch"
+
+    if [[ "$arch" == "x86_64" ]]; then
+        tree_sitter_arch="x64"
+    fi
+
+    tree_sitter_file="tree-sitter-cli-linux-${tree_sitter_arch}.zip"
+    tree_sitter_url="https://github.com/tree-sitter/tree-sitter/releases/latest/download/${tree_sitter_file}"
+
+    rm -rf /tmp/tree-sitter-cli
+    mkdir -p /tmp/tree-sitter-cli
+
+    curl -fsSL "$tree_sitter_url" -o "/tmp/$tree_sitter_file"
+    unzip -o "/tmp/$tree_sitter_file" -d /tmp/tree-sitter-cli
+
+    chmod +x /tmp/tree-sitter-cli/tree-sitter
+    sudo mv /tmp/tree-sitter-cli/tree-sitter /usr/local/bin/tree-sitter
+}
+
 install_nvim_dependencies_macos() {
     if ! command_exists brew; then
         return
@@ -57,12 +132,14 @@ install_nvim_dependencies_ubuntu() {
         return
     fi
 
-    install_apt_package "neovim"
     install_apt_package "curl"
+    install_apt_package "unzip"
     install_apt_package "build-essential"
     install_apt_package "ripgrep"
     install_apt_package "fd-find"
-    install_apt_package "tree-sitter-cli"
+
+    install_neovim_linux
+    install_tree_sitter_cli_linux
 
     if command_exists fdfind && ! command_exists fd; then
         mkdir -p "$HOME/.local/bin"
