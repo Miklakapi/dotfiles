@@ -4,7 +4,16 @@ Personal setup scripts for macOS and Ubuntu.
 
 ## Install
 
-Clone the repository:
+Clone the repository.
+
+For most users, HTTPS is the recommended option:
+
+```bash
+git clone https://github.com/Miklakapi/dotfiles.git ~/.dotfiles
+cd ~/.dotfiles
+```
+
+If you already have GitHub SSH access configured, you can use SSH instead:
 
 ```bash
 git clone git@github.com:Miklakapi/dotfiles.git ~/.dotfiles
@@ -28,6 +37,7 @@ Run selected setup:
 ./run fonts
 ./run nvim
 ./run bin
+./run docker
 ```
 
 Dry run:
