@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -e
+
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+install_tmux() {
+  if command_exists tmux; then
+    echo "tmux is already installed"
+    tmux -V
+    return
+  fi
+
+  if command_exists brew; then
+    brew install tmux
+    return
+  fi
+
+  if command_exists apt; then
+    sudo apt update
+    sudo apt install -y tmux
+    return
+  fi
+
+  echo "Unsupported system."
+  echo "This setup supports only macOS with Homebrew and Debian/Ubuntu with apt."
+  exit 1
+}
+
+install_tmux
