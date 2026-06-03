@@ -1,0 +1,272 @@
+#!/usr/bin/env bash
+
+set -e
+
+ssh_dir="$HOME/.ssh"
+ssh_config="$ssh_dir/config"
+
+show_usage() {
+    echo "Usage: ssh-host"
+    echo
+    echo "Interactive SSH host creator."
+    echo
+    echo "It helps you add entries like:"
+    echo
+    echo "Host github.com"
+    echo "  HostName github.com"
+    echo "  User git"
+    echo "  IdentityFile ~/.ssh/github_miklakapi"
+    echo "  IdentitiesOnly yes"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+is_macos() {
+    [[ "$(uname -s)" == "Darwin" ]]
+}
+
+ask() {
+    local label="$1"
+    local default_value="${2:-}"
+    local value=""
+
+    if [[ -n "$default_value" ]]; then
+        read -r -p "$label [$default_value]: " value
+        echo "${value:-$default_value}"
+        return
+    fi
+
+    read -r -p "$label: " value
+    echo "$value"
+}
+
+confirm() {
+    local question="$1"
+    local answer=""
+
+    read -r -p "$question [y/N] " answer
+
+    [[ "$answer" == "y" || "$answer" == "Y" ]]
+}
+
+ensure_ssh_files() {
+    mkdir -p "$ssh_dir"
+    touch "$ssh_config"
+
+    chmod 700 "$ssh_dir"
+    chmod 600 "$ssh_config"
+}
+
+has_global_host_config() {
+    grep -Eq '^Host \*$' "$ssh_config"
+}
+
+add_global_host_config_if_needed() {
+    if has_global_host_config; then
+        return
+    fi
+
+    {
+        echo
+        echo "Host *"
+        echo "  AddKeysToAgent 1h"
+
+        if is_macos; then
+            echo "  UseKeychain yes"
+        fi
+    } >> "$ssh_config"
+}
+
+host_exists() {
+    local host="$1"
+
+    grep -Eq "^Host[[:space:]]+$host$" "$ssh_config"
+}
+
+remove_host_block() {
+    local host="$1"
+    local temp_file=""
+
+    temp_file="$(mktemp)"
+
+    awk -v target="$host" '
+        /^Host[[:space:]]+/ {
+            current = $2
+            skip = (current == target)
+        }
+
+        !skip {
+            print
+        }
+    ' "$ssh_config" > "$temp_file"
+
+    cat "$temp_file" > "$ssh_config"
+    rm -f "$temp_file"
+}
+
+normalize_key_path() {
+    local key_name="$1"
+
+    if [[ "$key_name" == /* ]]; then
+        echo "$key_name"
+        return
+    fi
+
+    if [[ "$key_name" == ~/.ssh/* ]]; then
+        echo "$HOME/.ssh/${key_name#~/.ssh/}"
+        return
+    fi
+
+    if [[ "$key_name" == ~/* ]]; then
+        echo "$HOME/${key_name#~/}"
+        return
+    fi
+
+    echo "$ssh_dir/$key_name"
+}
+
+format_key_path_for_config() {
+    local key_path="$1"
+
+    if [[ "$key_path" == "$HOME/.ssh/"* ]]; then
+        echo "~/.ssh/${key_path#"$HOME/.ssh/"}"
+        return
+    fi
+
+    if [[ "$key_path" == "$HOME/"* ]]; then
+        echo "~/${key_path#"$HOME/"}"
+        return
+    fi
+
+    echo "$key_path"
+}
+
+generate_key_if_needed() {
+    local key_path="$1"
+
+    if [[ -f "$key_path" ]]; then
+        return
+    fi
+
+    echo
+    echo "Key does not exist:"
+    echo "  $key_path"
+    echo
+
+    if ! command_exists ssh-keygen; then
+        echo "ssh-keygen is required to generate a new key."
+        echo
+        echo "Install it first:"
+        echo "  Ubuntu: sudo apt-get install openssh-client"
+        echo "  macOS:  should be available by default"
+        exit 1
+    fi
+
+    if ! confirm "Generate new SSH key?"; then
+        echo "Cancelled."
+        exit 1
+    fi
+
+    ssh-keygen -t ed25519 -f "$key_path"
+}
+
+add_host_block() {
+    local host="$1"
+    local hostname="$2"
+    local user="$3"
+    local key_path="$4"
+    local config_key_path=""
+
+    config_key_path="$(format_key_path_for_config "$key_path")"
+
+    {
+        echo
+        echo "Host $host"
+        echo "  HostName $hostname"
+        echo "  User $user"
+        echo "  IdentityFile $config_key_path"
+        echo "  IdentitiesOnly yes"
+    } >> "$ssh_config"
+}
+
+show_public_key() {
+    local key_path="$1"
+    local public_key_path="$key_path.pub"
+
+    if [[ ! -f "$public_key_path" ]]; then
+        return
+    fi
+
+    echo
+    echo "Public key:"
+    echo
+    cat "$public_key_path"
+    echo
+}
+
+create_ssh_host() {
+    local host=""
+    local hostname=""
+    local user=""
+    local key_name=""
+    local key_path=""
+
+    ensure_ssh_files
+    add_global_host_config_if_needed
+
+    echo "Create SSH host"
+    echo
+
+    host="$(ask "Host alias" "github.com")"
+
+    if [[ "$host" == "github.com" ]]; then
+        hostname="$(ask "HostName" "github.com")"
+        user="$(ask "User" "git")"
+        key_name="$(ask "Key name" "github")"
+    else
+        hostname="$(ask "HostName" "$host")"
+        user="$(ask "User" "$USER")"
+        key_name="$(ask "Key name" "$host")"
+    fi
+
+    key_path="$(normalize_key_path "$key_name")"
+
+    if host_exists "$host"; then
+        echo
+        echo "Host already exists in $ssh_config:"
+        echo "  $host"
+        echo
+
+        if ! confirm "Replace it?"; then
+            echo "Cancelled."
+            exit 1
+        fi
+
+        remove_host_block "$host"
+    fi
+
+    generate_key_if_needed "$key_path"
+    add_host_block "$host" "$hostname" "$user" "$key_path"
+
+    chmod 600 "$ssh_config"
+    chmod 600 "$key_path" 2>/dev/null || true
+    chmod 644 "$key_path.pub" 2>/dev/null || true
+
+    echo
+    echo "SSH host added:"
+    echo "  $host"
+    echo
+    echo "Test connection:"
+    echo "  ssh -T $host"
+
+    show_public_key "$key_path"
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    show_usage
+    exit 0
+fi
+
+create_ssh_host
