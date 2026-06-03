@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+
+set -e
+
+repo="$1"
+remote_name="origin"
+
+show_usage() {
+    echo "Usage: repo-connect <repo>"
+    echo
+    echo "Examples:"
+    echo "  repo-connect Miklakapi/repo"
+    echo "  repo-connect https://github.com/Miklakapi/repo"
+    echo "  repo-connect https://github.com/Miklakapi/repo.git"
+    echo "  repo-connect git@github.com:Miklakapi/repo.git"
+}
+
+is_git_repository() {
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+has_commits() {
+    git rev-parse --verify HEAD >/dev/null 2>&1
+}
+
+clean_repo() {
+    local value="$1"
+
+    value="${value%%\?*}"
+    value="${value%%#*}"
+    value="${value%/}"
+
+    echo "$value"
+}
+
+remove_git_suffix() {
+    local value="$1"
+
+    value="${value%.git}"
+
+    echo "$value"
+}
+
+normalize_repo() {
+    local value="$1"
+    local host=""
+    local path=""
+
+    value="$(clean_repo "$value")"
+
+    if [[ "$value" =~ ^git@[^:]+:.+/.+\.git$ ]]; then
+        echo "$value"
+        return
+    fi
+
+    if [[ "$value" =~ ^git@[^:]+:.+/.+$ ]]; then
+        value="$(remove_git_suffix "$value")"
+        echo "${value}.git"
+        return
+    fi
+
+    if [[ "$value" =~ ^https?://[^/]+/.+/.+(\.git)?$ ]]; then
+        value="$(remove_git_suffix "$value")"
+        host="$(echo "$value" | sed -E 's#^https?://([^/]+)/.*#\1#')"
+        path="$(echo "$value" | sed -E 's#^https?://[^/]+/(.*)#\1#')"
+
+        echo "git@${host}:${path}.git"
+        return
+    fi
+
+    if [[ "$value" =~ ^[^/:[:space:]]+/[^/:[:space:]]+$ ]]; then
+        value="$(remove_git_suffix "$value")"
+        echo "git@github.com:${value}.git"
+        return
+    fi
+
+    echo "Unsupported repo format: $value" >&2
+    return 1
+}
+
+confirm_repo_if_needed() {
+    local original="$1"
+    local normalized="$2"
+    local answer=""
+
+    if [[ "$original" == "$normalized" ]]; then
+        return
+    fi
+
+    echo "Repo parsed as:"
+    echo "  $normalized"
+    echo
+    read -r -p "Use this repo? [y/N] " answer
+
+    if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
+        echo "Cancelled."
+        exit 1
+    fi
+}
+
+set_remote() {
+    local remote_url="$1"
+
+    if git remote get-url "$remote_name" >/dev/null 2>&1; then
+        git remote set-url "$remote_name" "$remote_url"
+        echo "Updated $remote_name:"
+        echo "  $remote_url"
+        return
+    fi
+
+    git remote add "$remote_name" "$remote_url"
+    echo "Added $remote_name:"
+    echo "  $remote_url"
+}
+
+check_remote() {
+    if git ls-remote "$remote_name" >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Remote was configured, but repository cannot be reached:"
+    echo "  git remote -v"
+    echo "  git ls-remote $remote_name"
+    exit 1
+}
+
+get_remote_branch() {
+    git ls-remote --symref "$remote_name" HEAD 2>/dev/null \
+        | awk '/^ref:/ { sub("refs\/heads\/", "", $2); print $2; exit }'
+}
+
+get_local_branch() {
+    git symbolic-ref --short HEAD
+}
+
+rename_branch_if_needed() {
+    local remote_branch="$1"
+    local local_branch=""
+
+    if [[ -z "$remote_branch" ]]; then
+        return
+    fi
+
+    local_branch="$(get_local_branch)"
+
+    if [[ "$local_branch" == "$remote_branch" ]]; then
+        return
+    fi
+
+    git branch -M "$remote_branch"
+
+    echo "Renamed local branch:"
+    echo "  $local_branch -> $remote_branch"
+}
+
+push_if_possible() {
+    local branch=""
+
+    if ! has_commits; then
+        echo "Remote is linked, but there are no commits to push."
+        return
+    fi
+
+    branch="$(get_local_branch)"
+
+    git push -u "$remote_name" "$branch"
+}
+
+connect_repo() {
+    local remote_url=""
+    local remote_branch=""
+
+    remote_url="$(normalize_repo "$repo")"
+
+    confirm_repo_if_needed "$repo" "$remote_url"
+
+    if ! is_git_repository; then
+        echo "This directory is not a git repository."
+        echo "Run git init first."
+        exit 1
+    fi
+
+    set_remote "$remote_url"
+    check_remote
+
+    remote_branch="$(get_remote_branch)"
+    rename_branch_if_needed "$remote_branch"
+
+    push_if_possible
+
+    echo
+    echo "Done."
+    git remote -v
+}
+
+if [[ -z "$repo" || "$repo" == "-h" || "$repo" == "--help" ]]; then
+    show_usage
+    exit 1
+fi
+
+connect_repo
