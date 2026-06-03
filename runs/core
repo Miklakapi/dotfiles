@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+
+set -e
+
+PACKAGES=(
+  curl
+  wget
+  htop
+)
+
+install_macos_packages() {
+  if ! command -v brew >/dev/null 2>&1; then
+    echo "Homebrew is not installed."
+    echo "Install Homebrew first: https://brew.sh"
+    exit 1
+  fi
+
+  brew install "${PACKAGES[@]}"
+}
+
+install_debian_packages() {
+  sudo apt update
+  sudo apt install -y "${PACKAGES[@]}"
+}
+
+main() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    install_macos_packages
+    return
+  fi
+
+  if [[ -f /etc/debian_version ]]; then
+    install_debian_packages
+    return
+  fi
+
+  echo "Unsupported system."
+  echo "This setup supports only macOS and Debian/Ubuntu."
+  exit 1
+}
+
+main "$@"
