@@ -2,31 +2,129 @@
 
 set -e
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmux_config_source="$script_dir/resources/tmux.conf"
+tmux_config_dir="$HOME/.config/tmux"
+tmux_config_target="$tmux_config_dir/tmux.conf"
+zshrc_file="$HOME/.zshrc"
+
 command_exists() {
-  command -v "$1" >/dev/null 2>&1
+    command -v "$1" >/dev/null 2>&1
 }
 
 install_tmux() {
-  if command_exists tmux; then
-    echo "tmux is already installed"
-    tmux -V
-    return
-  fi
+    if command_exists tmux; then
+        echo "tmux is already installed"
+        tmux -V
+        return
+    fi
 
-  if command_exists brew; then
-    brew install tmux
-    return
-  fi
+    if command_exists brew; then
+        brew install tmux
+        return
+    fi
 
-  if command_exists apt; then
-    sudo apt update
-    sudo apt install -y tmux
-    return
-  fi
+    if command_exists apt; then
+        sudo apt update
+        sudo apt install -y tmux xclip
+        return
+    fi
 
-  echo "Unsupported system."
-  echo "This setup supports only macOS with Homebrew and Debian/Ubuntu with apt."
-  exit 1
+    echo "Unsupported system."
+    echo "This setup supports only macOS with Homebrew and Debian/Ubuntu with apt."
+    exit 1
+}
+
+install_clipboard_dependencies() {
+    if command_exists pbcopy; then
+        return
+    fi
+
+    if command_exists xclip; then
+        return
+    fi
+
+    if command_exists apt; then
+        sudo apt update
+        sudo apt install -y xclip
+        return
+    fi
+
+    echo "Clipboard integration dependency is missing."
+    echo "On macOS, pbcopy should be available by default."
+    echo "On Debian/Ubuntu, install xclip."
+}
+
+copy_tmux_config() {
+    mkdir -p "$tmux_config_dir"
+
+    if [[ ! -f "$tmux_config_source" ]]; then
+        echo "tmux config source does not exist: $tmux_config_source"
+        exit 1
+    fi
+
+    if [[ ! -f "$tmux_config_target" ]]; then
+        cp "$tmux_config_source" "$tmux_config_target"
+        echo "tmux config copied:"
+        echo "$tmux_config_target"
+        return
+    fi
+
+    echo "tmux config already exists:"
+    echo "$tmux_config_target"
+    read -r -p "Overwrite it? [y/N] " answer
+
+    case "$answer" in
+        y|Y|yes|YES)
+            cp "$tmux_config_source" "$tmux_config_target"
+            echo "tmux config overwritten:"
+            echo "$tmux_config_target"
+            ;;
+        *)
+            echo "Existing tmux config was not changed."
+            ;;
+    esac
+}
+
+configure_tmux_project_dirs() {
+    local answer
+    local project_dirs
+
+    if [[ -f "$zshrc_file" ]] && grep -q '^export TMUX_PROJECT_DIRS=' "$zshrc_file"; then
+        echo "TMUX_PROJECT_DIRS is already configured in $zshrc_file:"
+        grep '^export TMUX_PROJECT_DIRS=' "$zshrc_file"
+        read -r -p "Overwrite it? [y/N] " answer
+
+        case "$answer" in
+            y|Y|yes|YES)
+                ;;
+            *)
+                echo "TMUX_PROJECT_DIRS was not changed."
+                return
+                ;;
+        esac
+
+        sed -i.bak '/^export TMUX_PROJECT_DIRS=/d' "$zshrc_file"
+    fi
+
+    echo "Enter project directories separated by colon:"
+    echo 'Example: $HOME/Code/personal:$HOME/Code/work'
+    read -r -p "TMUX_PROJECT_DIRS: " project_dirs
+
+    if [[ -z "$project_dirs" ]]; then
+        echo "No project directories provided. Skipping."
+        return
+    fi
+
+    touch "$zshrc_file"
+    printf '\nexport TMUX_PROJECT_DIRS="%s"\n' "$project_dirs" >> "$zshrc_file"
+
+    echo "TMUX_PROJECT_DIRS saved to $zshrc_file"
+    echo "Restart your shell or run:"
+    echo "source $zshrc_file"
 }
 
 install_tmux
+install_clipboard_dependencies
+copy_tmux_config
+configure_tmux_project_dirs

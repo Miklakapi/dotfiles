@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -e
+
+local_init="./.tmux-session"
+global_init="$(command -v .tmux-session || true)"
+
+run_local_init() {
+    "$local_init"
+}
+
+run_global_init() {
+    "$global_init"
+}
+
+main() {
+    if [[ -x "$local_init" ]]; then
+        run_local_init
+        return
+    fi
+
+    if [[ -n "$global_init" && -x "$global_init" ]]; then
+        run_global_init
+        return
+    fi
+
+    echo "No tmux init script found."
+    echo "Create .tmux-session in current directory or add global .tmux-session to PATH."
+    exit 1
+}
+
+main "$@"

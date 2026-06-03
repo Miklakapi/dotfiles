@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+set -e
+
+require_command() {
+    if command -v "$1" >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Missing required command: $1"
+    exit 1
+}
+
+require_project_dirs() {
+    if [[ -n "$TMUX_PROJECT_DIRS" ]]; then
+        return
+    fi
+
+    echo "TMUX_PROJECT_DIRS is not set."
+    echo "Example:"
+    echo 'export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"'
+    exit 1
+}
+
+find_projects() {
+    local project_dir
+
+    IFS=":" read -ra project_dirs <<< "$TMUX_PROJECT_DIRS"
+
+    for project_dir in "${project_dirs[@]}"; do
+        if [[ ! -d "$project_dir" ]]; then
+            continue
+        fi
+
+        find "$project_dir" -mindepth 1 -maxdepth 1 -type d
+    done
+}
+
+select_project() {
+    find_projects | fzf
+}
+
+create_session_name() {
+    local selected="$1"
+
+    basename "$selected" | tr ":,. " "____"
+}
+
+switch_to_session() {
+    local session_name="$1"
+
+    if [[ -z "$TMUX" ]]; then
+        tmux attach-session -t "$session_name"
+        return
+    fi
+
+    tmux switch-client -t "$session_name"
+}
+
+create_session() {
+    local session_name="$1"
+    local selected="$2"
+
+    tmux new-session -ds "$session_name" -c "$selected"
+}
+
+run_session_setup() {
+    local session_name="$1"
+
+    tmux send-keys -t "$session_name" "tmux-session" C-m
+}
+
+main() {
+    local selected
+    local selected_name
+
+    require_command tmux
+    require_command fzf
+    require_project_dirs
+
+    selected="$(select_project || true)"
+
+    if [[ -z "$selected" ]]; then
+        exit 0
+    fi
+
+    selected_name="$(create_session_name "$selected")"
+
+    if tmux has-session -t "$selected_name" 2>/dev/null; then
+        switch_to_session "$selected_name"
+        return
+    fi
+
+    create_session "$selected_name" "$selected"
+    run_session_setup "$selected_name"
+    switch_to_session "$selected_name"
+}
+
+main "$@"
