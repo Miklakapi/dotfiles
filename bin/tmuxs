@@ -67,7 +67,7 @@ create_session() {
 run_session_setup() {
     local session_name="$1"
 
-    tmux send-keys -t "$session_name" "tmux-session" C-m
+    tmux send-keys -t "$session_name" "tmux-session && clear" C-m
 }
 
 main() {
