@@ -8,6 +8,8 @@ PACKAGES=(
     htop
     fzf
     jq
+    parallel
+    tree
 )
 
 install_macos_packages() {
