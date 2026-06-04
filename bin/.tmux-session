@@ -2,4 +2,10 @@
 
 set -e
 
-tmux rename-window zsh
+tmux rename-window nvim
+tmux send-keys "nvim ." C-m
+
+tmux new-window -n zsh
+tmux send-keys "clear" C-m
+
+tmux select-window -t nvim
