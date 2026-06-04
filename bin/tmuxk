@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+
+set -e
+
+require_command() {
+    if command -v "$1" >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Missing required command: $1"
+    exit 1
+}
+
+get_open_sessions() {
+    tmux list-sessions -F '#S' 2>/dev/null || true
+}
+
+select_sessions() {
+    local open_sessions
+    local selected_sessions
+
+    open_sessions="$(get_open_sessions)"
+
+    if [[ -z "$open_sessions" ]]; then
+        echo "No tmux sessions are currently open."
+        exit 0
+    fi
+
+    selected_sessions="$(
+        echo "$open_sessions" |
+            fzf \
+                --multi \
+                --prompt="Kill tmux sessions > " \
+                --header="TAB - select, ENTER - kill selected"
+    )"
+
+    echo "$selected_sessions"
+}
+
+kill_sessions() {
+    local selected_sessions="$1"
+    local session_name
+
+    while IFS= read -r session_name; do
+        if [[ -z "$session_name" ]]; then
+            continue
+        fi
+
+        tmux kill-session -t "$session_name"
+        echo "Killed session: $session_name"
+    done <<< "$selected_sessions"
+}
+
+main() {
+    local selected_sessions
+
+    require_command tmux
+    require_command fzf
+
+    selected_sessions="$(select_sessions || true)"
+
+    if [[ -z "$selected_sessions" ]]; then
+        exit 0
+    fi
+
+    kill_sessions "$selected_sessions"
+}
+
+main "$@"
