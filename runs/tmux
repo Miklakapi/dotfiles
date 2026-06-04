@@ -86,40 +86,77 @@ copy_tmux_config() {
     esac
 }
 
-configure_tmux_project_dirs() {
+remove_tmux_projects_config() {
+    if [[ ! -f "$zshrc_file" ]]; then
+        return
+    fi
+
+    sed -i.bak '/^export TMUX_PROJECT_DIRS=/d' "$zshrc_file"
+    sed -i.bak '/^export TMUX_PROJECTS=/d' "$zshrc_file"
+}
+
+has_tmux_projects_config() {
+    if [[ ! -f "$zshrc_file" ]]; then
+        return 1
+    fi
+
+    grep -q '^export TMUX_PROJECT_DIRS=' "$zshrc_file" && return 0
+    grep -q '^export TMUX_PROJECTS=' "$zshrc_file" && return 0
+
+    return 1
+}
+
+show_tmux_projects_config() {
+    grep '^export TMUX_PROJECT_DIRS=' "$zshrc_file" || true
+    grep '^export TMUX_PROJECTS=' "$zshrc_file" || true
+}
+
+configure_tmux_projects() {
     local answer
     local project_dirs
+    local projects
 
-    if [[ -f "$zshrc_file" ]] && grep -q '^export TMUX_PROJECT_DIRS=' "$zshrc_file"; then
-        echo "TMUX_PROJECT_DIRS is already configured in $zshrc_file:"
-        grep '^export TMUX_PROJECT_DIRS=' "$zshrc_file"
+    if has_tmux_projects_config; then
+        echo "tmux projects config is already configured in $zshrc_file:"
+        show_tmux_projects_config
         read -r -p "Overwrite it? [y/N] " answer
 
         case "$answer" in
             y|Y|yes|YES)
                 ;;
             *)
-                echo "TMUX_PROJECT_DIRS was not changed."
+                echo "tmux projects config was not changed."
                 return
                 ;;
         esac
 
-        sed -i.bak '/^export TMUX_PROJECT_DIRS=/d' "$zshrc_file"
+        remove_tmux_projects_config
     fi
 
     echo "Enter project directories separated by colon:"
     echo 'Example: $HOME/Code/personal:$HOME/Code/work'
     read -r -p "TMUX_PROJECT_DIRS: " project_dirs
 
-    if [[ -z "$project_dirs" ]]; then
-        echo "No project directories provided. Skipping."
+    echo "Enter single projects separated by colon:"
+    echo 'Example: $HOME/.config/nvim:$HOME/.config/tmux'
+    read -r -p "TMUX_PROJECTS: " projects
+
+    if [[ -z "$project_dirs" && -z "$projects" ]]; then
+        echo "No project config provided. Skipping."
         return
     fi
 
     touch "$zshrc_file"
-    printf '\nexport TMUX_PROJECT_DIRS="%s"\n' "$project_dirs" >> "$zshrc_file"
 
-    echo "TMUX_PROJECT_DIRS saved to $zshrc_file"
+    if [[ -n "$project_dirs" ]]; then
+        printf '\nexport TMUX_PROJECT_DIRS="%s"\n' "$project_dirs" >> "$zshrc_file"
+    fi
+
+    if [[ -n "$projects" ]]; then
+        printf 'export TMUX_PROJECTS="%s"\n' "$projects" >> "$zshrc_file"
+    fi
+
+    echo "tmux projects config saved to $zshrc_file"
     echo "Restart your shell or run:"
     echo "source $zshrc_file"
 }
@@ -127,4 +164,4 @@ configure_tmux_project_dirs() {
 install_tmux
 install_clipboard_dependencies
 copy_tmux_config
-configure_tmux_project_dirs
+configure_tmux_projects
