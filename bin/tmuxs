@@ -23,7 +23,10 @@ require_project_dirs() {
 }
 
 find_projects() {
+    local open_sessions="$1"
     local project_dir
+    local project
+    local session_name
 
     IFS=":" read -ra project_dirs <<< "$TMUX_PROJECT_DIRS"
 
@@ -32,12 +35,38 @@ find_projects() {
             continue
         fi
 
-        find "$project_dir" -mindepth 1 -maxdepth 1 -type d
+        while IFS= read -r project; do
+            session_name="$(create_session_name "$project")"
+
+            if is_session_open "$session_name" "$open_sessions"; then
+                echo "* $project"
+                continue
+            fi
+
+            echo "  $project"
+        done < <(find "$project_dir" -mindepth 1 -maxdepth 1 -type d)
     done
 }
 
+get_open_sessions() {
+    tmux list-sessions -F '#S' 2>/dev/null || true
+}
+
+is_session_open() {
+    local session_name="$1"
+    local open_sessions="$2"
+
+    echo "$open_sessions" | grep -Fxq "$session_name"
+}
+
 select_project() {
-    find_projects | fzf
+    local open_sessions
+    local selected
+
+    open_sessions="$(get_open_sessions)"
+    selected="$(find_projects "$open_sessions" | fzf)"
+
+    echo "${selected:2}"
 }
 
 create_session_name() {
