@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -e
+
+github_api_url="https://api.github.com"
+
+show_usage() {
+  echo "Usage: repo-clone [query]"
+  echo
+  echo "Examples:"
+  echo "  repo-clone"
+  echo "  repo-clone dotfiles"
+  echo "  repo-clone api"
+  echo
+  echo "Required config:"
+  echo '  export GITHUB_OWNER="Miklakapi"'
+  echo '  export REPO_CLONE_DIR="$HOME/Code/personal"'
+}
+
+require_command() {
+  if command -v "$1" >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Missing required command: $1"
+  exit 1
+}
+
+require_config() {
+  if [[ -z "$GITHUB_OWNER" ]]; then
+    echo "GITHUB_OWNER is not set."
+    echo "Example:"
+    echo 'export GITHUB_OWNER="Miklakapi"'
+    exit 1
+  fi
+
+  if [[ -z "$REPO_CLONE_DIR" ]]; then
+    echo "REPO_CLONE_DIR is not set."
+    echo "Example:"
+    echo 'export REPO_CLONE_DIR="$HOME/Code/personal"'
+    exit 1
+  fi
+}
+
+prepare_clone_dir() {
+  mkdir -p "$REPO_CLONE_DIR"
+}
+
+fetch_repos() {
+  curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    "$github_api_url/users/$GITHUB_OWNER/repos?per_page=100&type=owner&sort=updated"
+}
+
+parse_repos() {
+  jq -r '.[] | select(.name and .ssh_url) | "\(.name)\t\(.ssh_url)"'
+}
+
+filter_repos() {
+  local query="$1"
+
+  if [[ -z "$query" ]]; then
+    cat
+    return
+  fi
+
+  grep -i "$query" || true
+}
+
+select_repo() {
+  local query="$1"
+  local repos=""
+
+  repos="$(fetch_repos | parse_repos | filter_repos "$query")"
+
+  if [[ -z "$repos" ]]; then
+    echo "No repositories found for: $query" >&2
+    exit 1
+  fi
+
+  if [[ "$(echo "$repos" | wc -l | tr -d " ")" == "1" ]]; then
+    echo "$repos"
+    return
+  fi
+
+  echo "$repos" | fzf --with-nth=1 --delimiter=$'\t'
+}
+
+get_repo_name() {
+  local selected="$1"
+
+  echo "$selected" | cut -f1
+}
+
+get_repo_url() {
+  local selected="$1"
+
+  echo "$selected" | cut -f2
+}
+
+get_project_dir() {
+  local repo_name="$1"
+
+  echo "$REPO_CLONE_DIR/$repo_name"
+}
+
+clone_repo_if_needed() {
+  local repo_url="$1"
+  local project_dir="$2"
+
+  if [[ -d "$project_dir/.git" ]]; then
+    echo "Repository already exists:"
+    echo "  $project_dir"
+    return
+  fi
+
+  if [[ -e "$project_dir" ]]; then
+    echo "Path already exists, but it is not a git repository:"
+    echo "  $project_dir"
+    exit 1
+  fi
+
+  git clone "$repo_url" "$project_dir"
+}
+
+open_project() {
+  local project_dir="$1"
+
+  tmuxs "$project_dir"
+}
+
+main() {
+  local query="$1"
+  local selected=""
+  local repo_name=""
+  local repo_url=""
+  local project_dir=""
+
+  if [[ "$query" == "-h" || "$query" == "--help" ]]; then
+    show_usage
+    exit 0
+  fi
+
+  require_command curl
+  require_command jq
+  require_command git
+  require_command fzf
+  require_command tmuxs
+  require_config
+  prepare_clone_dir
+
+  selected="$(select_repo "$query")"
+
+  if [[ -z "$selected" ]]; then
+    exit 0
+  fi
+
+  repo_name="$(get_repo_name "$selected")"
+  repo_url="$(get_repo_url "$selected")"
+  project_dir="$(get_project_dir "$repo_name")"
+
+  clone_repo_if_needed "$repo_url" "$project_dir"
+  open_project "$project_dir"
+}
+
+main "$@"

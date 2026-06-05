@@ -21,7 +21,11 @@ install_git() {
     if command_exists apt; then
         sudo apt update
         sudo apt install -y git
+        return
     fi
+
+    echo "Could not install git. Missing supported package manager: brew or apt"
+    exit 1
 }
 
 ask_git_config() {
@@ -57,5 +61,99 @@ configure_git() {
     ask_git_config "user.email" "Git user email"
 }
 
+remove_repo_clone_config() {
+    local zshrc_file="$HOME/.zshrc"
+
+    if [[ ! -f "$zshrc_file" ]]; then
+        return
+    fi
+
+    sed -i.bak '/^export GITHUB_OWNER=/d' "$zshrc_file"
+    sed -i.bak '/^export REPO_CLONE_DIR=/d' "$zshrc_file"
+}
+
+has_repo_clone_config() {
+    local zshrc_file="$HOME/.zshrc"
+
+    if [[ ! -f "$zshrc_file" ]]; then
+        return 1
+    fi
+
+    grep -q '^export GITHUB_OWNER=' "$zshrc_file" && return 0
+    grep -q '^export REPO_CLONE_DIR=' "$zshrc_file" && return 0
+
+    return 1
+}
+
+show_repo_clone_config() {
+    local zshrc_file="$HOME/.zshrc"
+
+    grep '^export GITHUB_OWNER=' "$zshrc_file" || true
+    grep '^export REPO_CLONE_DIR=' "$zshrc_file" || true
+}
+
+configure_repo_clone() {
+    local zshrc_file="$HOME/.zshrc"
+    local answer=""
+    local github_owner=""
+    local repo_clone_dir=""
+
+    read -r -p "Configure repo-clone? [y/N] " answer
+
+    case "$answer" in
+        y|Y|yes|YES) ;;
+        *)
+            echo "repo-clone config was not changed."
+            return
+            ;;
+    esac
+
+    if has_repo_clone_config; then
+        echo "repo-clone config is already configured in $zshrc_file:"
+        show_repo_clone_config
+
+        read -r -p "Overwrite it? [y/N] " answer
+
+        case "$answer" in
+            y|Y|yes|YES) ;;
+            *)
+                echo "repo-clone config was not changed."
+                return
+                ;;
+        esac
+
+        remove_repo_clone_config
+    fi
+
+    echo "Enter GitHub username used by repo-clone:"
+    echo "Example: Miklakapi"
+    read -r -p "GITHUB_OWNER: " github_owner
+
+    echo "Enter directory where repo-clone should clone repositories:"
+    echo 'Example: $HOME/Code/personal'
+    read -r -p "REPO_CLONE_DIR: " repo_clone_dir
+
+    if [[ -z "$github_owner" && -z "$repo_clone_dir" ]]; then
+        echo "No repo-clone config provided."
+        echo "Skipping."
+        return
+    fi
+
+    touch "$zshrc_file"
+
+    if [[ -n "$github_owner" ]]; then
+        printf '\nexport GITHUB_OWNER="%s"\n' "$github_owner" >> "$zshrc_file"
+    fi
+
+    if [[ -n "$repo_clone_dir" ]]; then
+        printf 'export REPO_CLONE_DIR="%s"\n' "$repo_clone_dir" >> "$zshrc_file"
+    fi
+
+    echo "repo-clone config saved to $zshrc_file"
+    echo "Restart your shell or run:"
+    echo "source $zshrc_file"
+}
+
 install_git
 configure_git
+configure_repo_clone
