@@ -137,13 +137,23 @@ main() {
     local selected_name
 
     require_command tmux
-    require_command fzf
-    require_projects_config
 
-    selected="$(select_project || true)"
+    if [[ -n "$1" ]]; then
+        selected="$1"
+    else
+        require_command fzf
+        require_projects_config
+        selected="$(select_project || true)"
+    fi
 
     if [[ -z "$selected" ]]; then
         exit 0
+    fi
+
+    if [[ ! -d "$selected" ]]; then
+        echo "Project directory does not exist:"
+        echo "  $selected"
+        exit 1
     fi
 
     selected_name="$(create_session_name "$selected")"
