@@ -38,6 +38,8 @@ Run selected setup:
 ./run nvim
 ./run bin
 ./run docker
+./run tmux
+./run core
 ```
 
 Dry run:
