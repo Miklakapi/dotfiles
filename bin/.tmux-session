@@ -2,10 +2,13 @@
 
 set -e
 
-tmux rename-window nvim
-tmux send-keys "nvim ." C-m
+target_pane="${TMUX_PANE}"
+target_window="$(tmux display-message -p -t "$target_pane" "#{window_id}")"
 
-tmux new-window -n zsh
-tmux send-keys "clear" C-m
+tmux rename-window -t "$target_pane" nvim
+tmux send-keys -t "$target_pane" "nvim ." C-m
 
-tmux select-window -t nvim
+zsh_pane="$(tmux new-window -n zsh -P -F "#{pane_id}")"
+tmux send-keys -t "$zsh_pane" "clear" C-m
+
+tmux select-window -t "$target_window"
