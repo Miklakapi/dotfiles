@@ -11,4 +11,12 @@ tmux send-keys -t "$target_pane" "nvim ." C-m
 zsh_pane="$(tmux new-window -n zsh -P -F "#{pane_id}")"
 tmux send-keys -t "$zsh_pane" "clear" C-m
 
+if [[ -f package.json ]] && grep -q '"dev"' package.json; then
+    dev_pane="$(tmux new-window -n dev -P -F "#{pane_id}")"
+    tmux send-keys -t "$dev_pane" "npm run dev" C-m
+elif [[ -f go.mod ]]; then
+    dev_pane="$(tmux new-window -n dev -P -F "#{pane_id}")"
+    tmux send-keys -t "$dev_pane" "clear" C-m
+fi
+
 tmux select-window -t "$target_window"
