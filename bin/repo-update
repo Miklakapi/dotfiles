@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+
+set -e
+
+root_dir="$(pwd)"
+
+updated_repos=""
+problem_repos=""
+
+show_usage() {
+    echo "Usage: repo-update"
+    echo
+    echo "Updates git repositories placed one level below current directory."
+    echo
+    echo "Examples:"
+    echo " repo-update"
+    echo " cd ~/Code/personal && repo-update"
+}
+
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+require_command() {
+    if command_exists "$1"; then
+        return
+    fi
+
+    echo "Missing required command: $1"
+    exit 1
+}
+
+find_repositories() {
+    find "$root_dir" \
+        -mindepth 2 \
+        -maxdepth 2 \
+        -type d \
+        -name .git \
+        -print \
+        | sed 's#/.git$##' \
+        | sort
+}
+
+get_repo_name() {
+    local repo_dir="$1"
+
+    basename "$repo_dir"
+}
+
+has_upstream() {
+    local repo_dir="$1"
+
+    git -C "$repo_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1
+}
+
+has_submodules() {
+    local repo_dir="$1"
+
+    [[ -f "$repo_dir/.gitmodules" ]]
+}
+
+is_worktree_clean() {
+    local repo_dir="$1"
+
+    [[ -z "$(git -C "$repo_dir" status --porcelain)" ]]
+}
+
+fetch_repo() {
+    local repo_dir="$1"
+
+    git -C "$repo_dir" fetch --prune >/dev/null 2>&1
+}
+
+get_left_right_count() {
+    local repo_dir="$1"
+
+    git -C "$repo_dir" rev-list --left-right --count HEAD...'@{u}'
+}
+
+update_submodules() {
+    local repo_dir="$1"
+
+    git -C "$repo_dir" submodule update --init --recursive --remote >/dev/null 2>&1
+}
+
+add_updated_repo() {
+    local repo_name="$1"
+    local reason="$2"
+
+    updated_repos="${updated_repos}${repo_name} - ${reason}"$'\n'
+}
+
+add_problem_repo() {
+    local repo_name="$1"
+    local reason="$2"
+
+    problem_repos="${problem_repos}${repo_name} - ${reason}"$'\n'
+}
+
+update_repo_from_upstream() {
+    local repo_dir="$1"
+    local repo_name="$2"
+    local counts=""
+    local ahead=""
+    local behind=""
+
+    if ! has_upstream "$repo_dir"; then
+        add_problem_repo "$repo_name" "no upstream"
+        return
+    fi
+
+    if ! fetch_repo "$repo_dir"; then
+        add_problem_repo "$repo_name" "fetch failed"
+        return
+    fi
+
+    counts="$(get_left_right_count "$repo_dir")"
+    ahead="$(echo "$counts" | awk '{print $1}')"
+    behind="$(echo "$counts" | awk '{print $2}')"
+
+    if [[ "$behind" == "0" ]]; then
+        return
+    fi
+
+    if [[ "$ahead" != "0" ]]; then
+        add_problem_repo "$repo_name" "diverged"
+        return
+    fi
+
+    if git -C "$repo_dir" pull --ff-only >/dev/null 2>&1; then
+        add_updated_repo "$repo_name" "pulled"
+        return
+    fi
+
+    add_problem_repo "$repo_name" "pull failed"
+}
+
+update_repo_submodules() {
+    local repo_dir="$1"
+    local repo_name="$2"
+
+    if ! has_submodules "$repo_dir"; then
+        return
+    fi
+
+    if update_submodules "$repo_dir"; then
+        add_updated_repo "$repo_name" "submodules updated"
+        return
+    fi
+
+    add_problem_repo "$repo_name" "submodule update failed"
+}
+
+update_repo() {
+    local repo_dir="$1"
+    local repo_name=""
+
+    repo_name="$(get_repo_name "$repo_dir")"
+
+    if ! is_worktree_clean "$repo_dir"; then
+        add_problem_repo "$repo_name" "dirty worktree"
+        return
+    fi
+
+    update_repo_from_upstream "$repo_dir" "$repo_name"
+    update_repo_submodules "$repo_dir" "$repo_name"
+}
+
+update_repositories() {
+    local repo_dir=""
+
+    while IFS= read -r repo_dir; do
+        update_repo "$repo_dir"
+    done < <(find_repositories)
+}
+
+print_results() {
+    if [[ -n "$updated_repos" ]]; then
+        echo "Updated:"
+        echo "$updated_repos" | sed '/^$/d' | sed 's/^/ - /'
+    fi
+
+    if [[ -n "$problem_repos" ]]; then
+        echo "Needs attention:"
+        echo "$problem_repos" | sed '/^$/d' | sed 's/^/ - /'
+    fi
+}
+
+main() {
+    if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+        show_usage
+        exit 0
+    fi
+
+    require_command git
+    require_command find
+    require_command sed
+    require_command awk
+
+    update_repositories
+    print_results
+}
+
+main "$@"
