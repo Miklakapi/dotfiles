@@ -6,6 +6,49 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+remove_nvm_from_file() {
+    local file="$1"
+    local temp_file=""
+
+    if [[ ! -f "$file" ]]; then
+        return
+    fi
+
+    temp_file="$(mktemp)"
+
+    awk '
+        $0 ~ /NVM_DIR/ { next }
+        $0 ~ /nvm\.sh/ { next }
+        $0 ~ /bash_completion/ && $0 ~ /nvm/ { next }
+        $0 ~ /\.nvm/ { next }
+        { print }
+    ' "$file" > "$temp_file"
+
+    cat "$temp_file" > "$file"
+    rm -f "$temp_file"
+}
+
+remove_nvm_from_shell_configs() {
+    remove_nvm_from_file "$HOME/.bashrc"
+    remove_nvm_from_file "$HOME/.bash_profile"
+    remove_nvm_from_file "$HOME/.profile"
+    remove_nvm_from_file "$HOME/.zshrc"
+    remove_nvm_from_file "$HOME/.zprofile"
+}
+
+remove_nvm_directory() {
+    if [[ ! -d "$HOME/.nvm" ]]; then
+        return
+    fi
+
+    rm -rf "$HOME/.nvm"
+}
+
+remove_nvm() {
+    remove_nvm_from_shell_configs
+    remove_nvm_directory
+}
+
 install_fnm() {
     if command_exists fnm; then
         echo "fnm is already installed"
@@ -60,6 +103,7 @@ install_node() {
     fnm default latest
 }
 
+remove_nvm
 install_fnm
 configure_fnm_shell
 load_fnm
