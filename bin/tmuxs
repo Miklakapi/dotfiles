@@ -105,7 +105,7 @@ select_project() {
             | env FZF_DEFAULT_OPTS= fzf \
                 --delimiter=$'\t' \
                 --with-nth=2,3 \
-                --layout=reverse
+                --layout=reverse \
                 --header="󰓩 open tmux session | 󰒓 local .tmux-session"
     )"
 

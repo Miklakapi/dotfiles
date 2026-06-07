@@ -30,7 +30,7 @@ select_sessions() {
         echo "$open_sessions" |
             fzf \
                 --multi \
-                --layout=reverse
+                --layout=reverse \
                 --prompt="Kill tmux sessions > " \
                 --header="TAB - select, ENTER - kill selected"
     )"
