@@ -35,18 +35,20 @@ format_project() {
     local session_name
     local session_marker=" "
     local config_marker=" "
+    local sort_group="9"
 
     session_name="$(create_session_name "$project")"
 
     if is_session_open "$session_name" "$open_sessions"; then
         session_marker="󰓩"
+        sort_group="0"
     fi
 
     if has_local_session_config "$project"; then
         config_marker="󰒓"
     fi
 
-    printf "%s %s\t%s\n" "$session_marker" "$config_marker" "$project"
+    printf "%s\t%s %s\t%s\n" "$sort_group" "$session_marker" "$config_marker" "$project"
 }
 
 find_projects() {
@@ -97,9 +99,17 @@ select_project() {
     local selected
 
     open_sessions="$(get_open_sessions)"
-    selected="$(find_projects "$open_sessions" | fzf --delimiter='\t' --with-nth=1,2 --header="󰓩 open tmux session | 󰒓 local .tmux-session")"
+    selected="$(
+        find_projects "$open_sessions" \
+            | sort -t $'\t' -k1,1n -k3,3 \
+            | env FZF_DEFAULT_OPTS= fzf \
+                --delimiter=$'\t' \
+                --with-nth=2,3 \
+                --layout=reverse
+                --header="󰓩 open tmux session | 󰒓 local .tmux-session"
+    )"
 
-    echo "${selected#*$'\t'}"
+    echo "${selected##*$'\t'}"
 }
 
 create_session_name() {
