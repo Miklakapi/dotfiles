@@ -2,35 +2,29 @@
 
 set -e
 
-port="$1"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-show_usage() {
-    echo "Usage: kill-port <port>"
-}
+source "$script_dir/lib/common.sh"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-get_port_pids() {
+main() {
     local port="$1"
-
-    if ! command_exists lsof; then
-        echo "lsof is required"
-        return 1
-    fi
-
-    lsof -ti ":$port" || true
-}
-
-kill_port() {
-    local port="$1"
-    local pids=""
 
     if [[ -z "$port" ]]; then
         show_usage
         return 1
     fi
+
+    require_command lsof
+    kill_port "$port"
+}
+
+show_usage() {
+    echo "Usage: kill-port <port>" >&2
+}
+
+kill_port() {
+    local port="$1"
+    local pids=""
 
     pids="$(get_port_pids "$port")"
 
@@ -45,4 +39,10 @@ kill_port() {
     echo "$pids" | xargs kill -9
 }
 
-kill_port "$port"
+get_port_pids() {
+    local port="$1"
+
+    lsof -ti ":$port" || true
+}
+
+main "$@"

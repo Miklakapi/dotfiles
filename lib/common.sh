@@ -4,6 +4,17 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+require_command() {
+    local command_name="$1"
+
+    if command_exists "$command_name"; then
+        return
+    fi
+
+    echo "Missing required command: $command_name" >&2
+    return 1
+}
+
 is_macos() {
     [[ "$(uname -s)" == "Darwin" ]]
 }

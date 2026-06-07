@@ -2,13 +2,49 @@
 
 set -e
 
-require_command() {
-    if command -v "$1" >/dev/null 2>&1; then
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local selected=""
+    local selected_name=""
+    local target_pane=""
+
+    require_command tmux
+
+    selected="$(get_selected_project "${1:-}")"
+
+    if [[ -z "$selected" ]]; then
         return
     fi
 
-    echo "Missing required command: $1"
-    exit 1
+    require_project_dir "$selected"
+
+    selected_name="$(create_session_name "$selected")"
+
+    if has_tmux_session "$selected_name"; then
+        switch_to_session "$selected_name"
+        return
+    fi
+
+    target_pane="$(create_session "$selected_name" "$selected")"
+    run_session_setup "$target_pane"
+    switch_to_session "$selected_name"
+}
+
+get_selected_project() {
+    local project_arg="$1"
+
+    if [[ -n "$project_arg" ]]; then
+        echo "$project_arg"
+        return
+    fi
+
+    require_command fzf
+    require_projects_config
+
+    select_project || true
 }
 
 require_projects_config() {
@@ -16,23 +52,82 @@ require_projects_config() {
         return
     fi
 
-    echo "TMUX_PROJECT_DIRS or TMUX_PROJECTS is not set."
-    echo "Example:"
-    echo 'export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"'
-    echo 'export TMUX_PROJECTS="$HOME/.config/nvim"'
-    exit 1
+    echo "TMUX_PROJECT_DIRS or TMUX_PROJECTS is not set." >&2
+    echo "Example:" >&2
+    echo 'export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"' >&2
+    echo 'export TMUX_PROJECTS="$HOME/.config/nvim"' >&2
+    return 1
 }
 
-has_local_session_config() {
-    local project="$1"
+select_project() {
+    local open_sessions=""
+    local selected=""
 
-    [[ -x "$project/.tmux-session" ]]
+    open_sessions="$(get_open_sessions)"
+    selected="$(
+        find_projects "$open_sessions" \
+            | sort -t $'\t' -k1,1n -k3,3 \
+            | env FZF_DEFAULT_OPTS= fzf \
+                --delimiter=$'\t' \
+                --with-nth=2,3 \
+                --layout=reverse \
+                --header="󰓩 open tmux session | 󰒓 local .tmux-session"
+    )"
+
+    echo "${selected##*$'\t'}"
+}
+
+find_projects() {
+    local open_sessions="$1"
+    local project_dir=""
+    local project=""
+
+    if [[ -n "$TMUX_PROJECT_DIRS" ]]; then
+        IFS=":" read -ra project_dirs <<< "$TMUX_PROJECT_DIRS"
+
+        for project_dir in "${project_dirs[@]}"; do
+            find_projects_in_dir "$project_dir" "$open_sessions"
+        done
+    fi
+
+    if [[ -n "$TMUX_PROJECTS" ]]; then
+        IFS=":" read -ra projects <<< "$TMUX_PROJECTS"
+
+        for project in "${projects[@]}"; do
+            format_project_if_valid "$project" "$open_sessions"
+        done
+    fi
+}
+
+find_projects_in_dir() {
+    local project_dir="$1"
+    local open_sessions="$2"
+    local project=""
+
+    if [[ ! -d "$project_dir" ]]; then
+        return
+    fi
+
+    while IFS= read -r project; do
+        format_project "$project" "$open_sessions"
+    done < <(find "$project_dir" -mindepth 1 -maxdepth 1 -type d)
+}
+
+format_project_if_valid() {
+    local project="$1"
+    local open_sessions="$2"
+
+    if [[ ! -d "$project" ]]; then
+        return
+    fi
+
+    format_project "$project" "$open_sessions"
 }
 
 format_project() {
     local project="$1"
     local open_sessions="$2"
-    local session_name
+    local session_name=""
     local session_marker=" "
     local config_marker=" "
     local sort_group="9"
@@ -51,36 +146,10 @@ format_project() {
     printf "%s\t%s %s\t%s\n" "$sort_group" "$session_marker" "$config_marker" "$project"
 }
 
-find_projects() {
-    local open_sessions="$1"
-    local project_dir
-    local project
+has_local_session_config() {
+    local project="$1"
 
-    if [[ -n "$TMUX_PROJECT_DIRS" ]]; then
-        IFS=":" read -ra project_dirs <<< "$TMUX_PROJECT_DIRS"
-
-        for project_dir in "${project_dirs[@]}"; do
-            if [[ ! -d "$project_dir" ]]; then
-                continue
-            fi
-
-            while IFS= read -r project; do
-                format_project "$project" "$open_sessions"
-            done < <(find "$project_dir" -mindepth 1 -maxdepth 1 -type d)
-        done
-    fi
-
-    if [[ -n "$TMUX_PROJECTS" ]]; then
-        IFS=":" read -ra projects <<< "$TMUX_PROJECTS"
-
-        for project in "${projects[@]}"; do
-            if [[ ! -d "$project" ]]; then
-                continue
-            fi
-
-            format_project "$project" "$open_sessions"
-        done
-    fi
+    [[ -x "$project/.tmux-session" ]]
 }
 
 get_open_sessions() {
@@ -94,28 +163,28 @@ is_session_open() {
     echo "$open_sessions" | grep -Fxq "$session_name"
 }
 
-select_project() {
-    local open_sessions
-    local selected
+require_project_dir() {
+    local selected="$1"
 
-    open_sessions="$(get_open_sessions)"
-    selected="$(
-        find_projects "$open_sessions" \
-            | sort -t $'\t' -k1,1n -k3,3 \
-            | env FZF_DEFAULT_OPTS= fzf \
-                --delimiter=$'\t' \
-                --with-nth=2,3 \
-                --layout=reverse \
-                --header="󰓩 open tmux session | 󰒓 local .tmux-session"
-    )"
+    if [[ -d "$selected" ]]; then
+        return
+    fi
 
-    echo "${selected##*$'\t'}"
+    echo "Project directory does not exist:" >&2
+    echo "  $selected" >&2
+    return 1
 }
 
 create_session_name() {
     local selected="$1"
 
     basename "$selected" | tr ":,. " "____"
+}
+
+has_tmux_session() {
+    local session_name="$1"
+
+    tmux has-session -t "$session_name" 2>/dev/null
 }
 
 switch_to_session() {
@@ -140,43 +209,6 @@ run_session_setup() {
     local target_pane="$1"
 
     tmux send-keys -t "$target_pane" "tmux-session && clear" C-m
-}
-
-main() {
-    local selected
-    local selected_name
-    local target_pane
-
-    require_command tmux
-
-    if [[ -n "$1" ]]; then
-        selected="$1"
-    else
-        require_command fzf
-        require_projects_config
-        selected="$(select_project || true)"
-    fi
-
-    if [[ -z "$selected" ]]; then
-        exit 0
-    fi
-
-    if [[ ! -d "$selected" ]]; then
-        echo "Project directory does not exist:"
-        echo "  $selected"
-        exit 1
-    fi
-
-    selected_name="$(create_session_name "$selected")"
-
-    if tmux has-session -t "$selected_name" 2>/dev/null; then
-        switch_to_session "$selected_name"
-        return
-    fi
-
-    target_pane="$(create_session "$selected_name" "$selected")"
-    run_session_setup "$target_pane"
-    switch_to_session "$selected_name"
 }
 
 main "$@"

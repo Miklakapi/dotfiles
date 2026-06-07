@@ -2,10 +2,19 @@
 
 set -e
 
-target="$1"
+main() {
+    local target="$1"
+
+    if [[ -z "$target" ]]; then
+        show_usage
+        return 1
+    fi
+
+    create_backup "$target"
+}
 
 show_usage() {
-    echo "Usage: backup <file-or-directory>"
+    echo "Usage: backup <file-or-directory>" >&2
 }
 
 create_backup() {
@@ -13,22 +22,17 @@ create_backup() {
     local timestamp=""
     local backup_path=""
 
-    if [[ -z "$target" ]]; then
-        show_usage
-        return 1
-    fi
-
     if [[ ! -e "$target" ]]; then
-        echo "Target does not exist: $target"
+        echo "Target does not exist: $target" >&2
         return 1
     fi
 
     timestamp="$(date +"%Y-%m-%d-%H-%M-%S")"
     backup_path="${target}.backup-${timestamp}"
 
-    cp -R "$target" "$backup_path"
+    cp -R -- "$target" "$backup_path"
 
     echo "$backup_path"
 }
 
-create_backup "$target"
+main "$@"

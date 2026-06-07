@@ -2,28 +2,34 @@
 
 set -e
 
-require_command() {
-    if command -v "$1" >/dev/null 2>&1; then
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local selected_sessions=""
+
+    require_command tmux
+    require_command fzf
+
+    selected_sessions="$(select_sessions || true)"
+
+    if [[ -z "$selected_sessions" ]]; then
         return
     fi
 
-    echo "Missing required command: $1"
-    exit 1
-}
-
-get_open_sessions() {
-    tmux list-sessions -F '#S' 2>/dev/null || true
+    kill_sessions "$selected_sessions"
 }
 
 select_sessions() {
-    local open_sessions
-    local selected_sessions
+    local open_sessions=""
+    local selected_sessions=""
 
     open_sessions="$(get_open_sessions)"
 
     if [[ -z "$open_sessions" ]]; then
         echo "No tmux sessions are currently open."
-        exit 0
+        return
     fi
 
     selected_sessions="$(
@@ -38,33 +44,28 @@ select_sessions() {
     echo "$selected_sessions"
 }
 
+get_open_sessions() {
+    tmux list-sessions -F '#S' 2>/dev/null || true
+}
+
 kill_sessions() {
     local selected_sessions="$1"
-    local session_name
+    local session_name=""
 
     while IFS= read -r session_name; do
         if [[ -z "$session_name" ]]; then
             continue
         fi
 
-        tmux kill-session -t "$session_name"
-        echo "Killed session: $session_name"
+        kill_session "$session_name"
     done <<< "$selected_sessions"
 }
 
-main() {
-    local selected_sessions
+kill_session() {
+    local session_name="$1"
 
-    require_command tmux
-    require_command fzf
-
-    selected_sessions="$(select_sessions || true)"
-
-    if [[ -z "$selected_sessions" ]]; then
-        exit 0
-    fi
-
-    kill_sessions "$selected_sessions"
+    tmux kill-session -t "$session_name"
+    echo "Killed session: $session_name"
 }
 
 main "$@"

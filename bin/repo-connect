@@ -2,8 +2,22 @@
 
 set -e
 
-repo="$1"
 remote_name="origin"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local repo="$1"
+
+    if [[ -z "$repo" || "$repo" == "-h" || "$repo" == "--help" ]]; then
+        show_usage
+        return 1
+    fi
+
+    require_command git
+    connect_repo "$repo"
+}
 
 show_usage() {
     echo "Usage: repo-connect <repo>"
@@ -15,30 +29,27 @@ show_usage() {
     echo "  repo-connect git@github.com:Miklakapi/repo.git"
 }
 
-is_git_repository() {
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1
-}
+connect_repo() {
+    local repo="$1"
+    local remote_url=""
+    local remote_branch=""
 
-has_commits() {
-    git rev-parse --verify HEAD >/dev/null 2>&1
-}
+    remote_url="$(normalize_repo "$repo")"
 
-clean_repo() {
-    local value="$1"
+    confirm_repo_if_needed "$repo" "$remote_url"
+    require_git_repository
 
-    value="${value%%\?*}"
-    value="${value%%#*}"
-    value="${value%/}"
+    set_remote "$remote_url"
+    check_remote
 
-    echo "$value"
-}
+    remote_branch="$(get_remote_branch)"
+    rename_branch_if_needed "$remote_branch"
 
-remove_git_suffix() {
-    local value="$1"
+    push_if_possible
 
-    value="${value%.git}"
-
-    echo "$value"
+    echo
+    echo "Done."
+    git remote -v
 }
 
 normalize_repo() {
@@ -78,6 +89,24 @@ normalize_repo() {
     return 1
 }
 
+clean_repo() {
+    local value="$1"
+
+    value="${value%%\?*}"
+    value="${value%%#*}"
+    value="${value%/}"
+
+    echo "$value"
+}
+
+remove_git_suffix() {
+    local value="$1"
+
+    value="${value%.git}"
+
+    echo "$value"
+}
+
 confirm_repo_if_needed() {
     local original="$1"
     local normalized="$2"
@@ -92,10 +121,26 @@ confirm_repo_if_needed() {
     echo
     read -r -p "Use this repo? [y/N] " answer
 
-    if [[ "$answer" != "y" && "$answer" != "Y" ]]; then
-        echo "Cancelled."
-        exit 1
+    if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+        return
     fi
+
+    echo "Cancelled." >&2
+    return 1
+}
+
+require_git_repository() {
+    if is_git_repository; then
+        return
+    fi
+
+    echo "This directory is not a git repository." >&2
+    echo "Run git init first." >&2
+    return 1
+}
+
+is_git_repository() {
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1
 }
 
 set_remote() {
@@ -118,19 +163,15 @@ check_remote() {
         return
     fi
 
-    echo "Remote was configured, but repository cannot be reached:"
-    echo "  git remote -v"
-    echo "  git ls-remote $remote_name"
-    exit 1
+    echo "Remote was configured, but repository cannot be reached:" >&2
+    echo "  git remote -v" >&2
+    echo "  git ls-remote $remote_name" >&2
+    return 1
 }
 
 get_remote_branch() {
     git ls-remote --symref "$remote_name" HEAD 2>/dev/null \
         | awk '/^ref:/ { sub("refs\/heads\/", "", $2); print $2; exit }'
-}
-
-get_local_branch() {
-    git symbolic-ref --short HEAD
 }
 
 rename_branch_if_needed() {
@@ -153,6 +194,10 @@ rename_branch_if_needed() {
     echo "  $local_branch -> $remote_branch"
 }
 
+get_local_branch() {
+    git symbolic-ref --short HEAD
+}
+
 push_if_possible() {
     local branch=""
 
@@ -166,36 +211,8 @@ push_if_possible() {
     git push -u "$remote_name" "$branch"
 }
 
-connect_repo() {
-    local remote_url=""
-    local remote_branch=""
-
-    remote_url="$(normalize_repo "$repo")"
-
-    confirm_repo_if_needed "$repo" "$remote_url"
-
-    if ! is_git_repository; then
-        echo "This directory is not a git repository."
-        echo "Run git init first."
-        exit 1
-    fi
-
-    set_remote "$remote_url"
-    check_remote
-
-    remote_branch="$(get_remote_branch)"
-    rename_branch_if_needed "$remote_branch"
-
-    push_if_possible
-
-    echo
-    echo "Done."
-    git remote -v
+has_commits() {
+    git rev-parse --verify HEAD >/dev/null 2>&1
 }
 
-if [[ -z "$repo" || "$repo" == "-h" || "$repo" == "--help" ]]; then
-    show_usage
-    exit 1
-fi
-
-connect_repo
+main "$@"

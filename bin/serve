@@ -2,51 +2,84 @@
 
 set -e
 
-path="${1:-.}"
-port="${2:-8000}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local path="${1:-.}"
+    local port="${2:-8000}"
+
+    if [[ "$path" == "-h" || "$path" == "--help" ]]; then
+        show_usage
+        return
+    fi
+
+    serve_path "$path" "$port"
+}
 
 show_usage() {
     echo "Usage: serve [path] [port]"
-}
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
 }
 
 serve_path() {
     local path="$1"
     local port="$2"
 
-    if [[ "$path" == "-h" ]] || [[ "$path" == "--help" ]]; then
-        show_usage
-        return
-    fi
-
-    if [[ ! -e "$path" ]]; then
-        echo "Path does not exist: $path"
-        return 1
-    fi
+    require_existing_path "$path"
 
     if [[ -f "$path" ]]; then
         path="$(dirname "$path")"
     fi
 
+    serve_directory "$path" "$port"
+}
+
+require_existing_path() {
+    local path="$1"
+
+    if [[ -e "$path" ]]; then
+        return
+    fi
+
+    echo "Path does not exist: $path" >&2
+    return 1
+}
+
+serve_directory() {
+    local path="$1"
+    local port="$2"
+
     if command_exists uv; then
-        echo "Serving $path at http://localhost:$port"
-        cd "$path"
-        uv run python -m http.server "$port"
+        serve_directory_with_uv "$path" "$port"
         return
     fi
 
     if command_exists python3; then
-        echo "Serving $path at http://localhost:$port"
-        cd "$path"
-        python3 -m http.server "$port"
+        serve_directory_with_python3 "$path" "$port"
         return
     fi
 
-    echo "uv or python3 is required"
+    echo "uv or python3 is required" >&2
     return 1
 }
 
-serve_path "$path" "$port"
+serve_directory_with_uv() {
+    local path="$1"
+    local port="$2"
+
+    echo "Serving $path at http://localhost:$port"
+    cd "$path"
+    uv run python -m http.server "$port"
+}
+
+serve_directory_with_python3() {
+    local path="$1"
+    local port="$2"
+
+    echo "Serving $path at http://localhost:$port"
+    cd "$path"
+    python3 -m http.server "$port"
+}
+
+main "$@"

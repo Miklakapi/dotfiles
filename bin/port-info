@@ -2,17 +2,11 @@
 
 set -e
 
-port="$1"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-show_usage() {
-    echo "Usage: port-info <port>"
-}
+source "$script_dir/lib/common.sh"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-show_port_info() {
+main() {
     local port="$1"
 
     if [[ -z "$port" ]]; then
@@ -20,12 +14,27 @@ show_port_info() {
         return 1
     fi
 
-    if ! command_exists lsof; then
-        echo "lsof is required"
-        return 1
-    fi
+    require_command lsof
+    show_port_info "$port"
+}
 
+show_usage() {
+    echo "Usage: port-info <port>" >&2
+}
+
+show_port_info() {
+    local port="$1"
+
+    print_port_info_header
+    print_port_info_rows "$port"
+}
+
+print_port_info_header() {
     printf "%-8s %-10s %-14s %-14s %s\n" "PORT" "PID" "COMMAND" "ADDRESS" "USER"
+}
+
+print_port_info_rows() {
+    local port="$1"
 
     lsof -nP -iTCP:"$port" -sTCP:LISTEN | awk -v port="$port" '
         NR > 1 {
@@ -34,4 +43,4 @@ show_port_info() {
     '
 }
 
-show_port_info "$port"
+main "$@"
