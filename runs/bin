@@ -5,8 +5,11 @@ set -e
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bin_dir="$script_dir/bin"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+source "$script_dir/lib/common.sh"
+
+main() {
+    install_bin_dependencies
+    configure_bin_path
 }
 
 install_bin_dependencies() {
@@ -15,30 +18,13 @@ install_bin_dependencies() {
         return
     fi
 
-    if command_exists brew; then
-        brew install lsof
-        return
-    fi
-
-    if command_exists apt; then
-        sudo apt update
-        sudo apt install -y lsof
-    fi
+    install_package "lsof"
 }
 
 configure_bin_path() {
-    local zshrc="$HOME/.zshrc"
-    local line="export PATH=\"$bin_dir:\$PATH\""
-
-    touch "$zshrc"
-
-    if grep -Fxq "$line" "$zshrc"; then
-        echo "dotfiles bin is already configured in .zshrc"
-        return
-    fi
-
-    echo "$line" >> "$zshrc"
+    append_zsh_block "bin" <<EOF
+export PATH="$bin_dir:\$PATH"
+EOF
 }
 
-install_bin_dependencies
-configure_bin_path
+main

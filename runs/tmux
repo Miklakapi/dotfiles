@@ -6,10 +6,14 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmux_config_source="$script_dir/resources/tmux.conf"
 tmux_config_dir="$HOME/.config/tmux"
 tmux_config_target="$tmux_config_dir/tmux.conf"
-zshrc_file="$HOME/.zshrc"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+source "$script_dir/lib/common.sh"
+
+main () {
+    install_tmux
+    install_clipboard_dependencies
+    copy_tmux_config
+    configure_tmux_projects
 }
 
 install_tmux() {
@@ -19,20 +23,12 @@ install_tmux() {
         return
     fi
 
-    if command_exists brew; then
-        brew install tmux
-        return
-    fi
-
     if command_exists apt; then
-        sudo apt update
-        sudo apt install -y tmux xclip
+        install_packages tmux xclip
         return
     fi
 
-    echo "Unsupported system."
-    echo "This setup supports only macOS with Homebrew and Debian/Ubuntu with apt."
-    exit 1
+    install_package "tmux"
 }
 
 install_clipboard_dependencies() {
@@ -45,8 +41,7 @@ install_clipboard_dependencies() {
     fi
 
     if command_exists apt; then
-        sudo apt update
-        sudo apt install -y xclip
+        install_package "xclip"
         return
     fi
 
@@ -56,6 +51,8 @@ install_clipboard_dependencies() {
 }
 
 copy_tmux_config() {
+    local answer=""
+
     mkdir -p "$tmux_config_dir"
 
     if [[ ! -f "$tmux_config_source" ]]; then
@@ -86,51 +83,13 @@ copy_tmux_config() {
     esac
 }
 
-remove_tmux_projects_config() {
-    if [[ ! -f "$zshrc_file" ]]; then
-        return
-    fi
-
-    sed -i.bak '/^export TMUX_PROJECT_DIRS=/d' "$zshrc_file"
-    sed -i.bak '/^export TMUX_PROJECTS=/d' "$zshrc_file"
-}
-
-has_tmux_projects_config() {
-    if [[ ! -f "$zshrc_file" ]]; then
-        return 1
-    fi
-
-    grep -q '^export TMUX_PROJECT_DIRS=' "$zshrc_file" && return 0
-    grep -q '^export TMUX_PROJECTS=' "$zshrc_file" && return 0
-
-    return 1
-}
-
-show_tmux_projects_config() {
-    grep '^export TMUX_PROJECT_DIRS=' "$zshrc_file" || true
-    grep '^export TMUX_PROJECTS=' "$zshrc_file" || true
-}
-
 configure_tmux_projects() {
-    local answer
-    local project_dirs
-    local projects
+    local project_dirs=""
+    local projects=""
 
-    if has_tmux_projects_config; then
-        echo "tmux projects config is already configured in $zshrc_file:"
-        show_tmux_projects_config
-        read -r -p "Overwrite it? [y/N] " answer
-
-        case "$answer" in
-            y|Y|yes|YES)
-                ;;
-            *)
-                echo "tmux projects config was not changed."
-                return
-                ;;
-        esac
-
-        remove_tmux_projects_config
+    if has_zsh_block "tmux"; then
+        echo "tmux is already configured"
+        return
     fi
 
     echo "Enter project directories separated by colon:"
@@ -146,22 +105,14 @@ configure_tmux_projects() {
         return
     fi
 
-    touch "$zshrc_file"
+    append_zsh_block "tmux" <<EOF
+export TMUX_PROJECT_DIRS="$project_dirs"
+export TMUX_PROJECTS="$projects"
+EOF
 
-    if [[ -n "$project_dirs" ]]; then
-        printf '\nexport TMUX_PROJECT_DIRS="%s"\n' "$project_dirs" >> "$zshrc_file"
-    fi
-
-    if [[ -n "$projects" ]]; then
-        printf 'export TMUX_PROJECTS="%s"\n' "$projects" >> "$zshrc_file"
-    fi
-
-    echo "tmux projects config saved to $zshrc_file"
+    echo "tmux projects config saved to $HOME/.zshrc"
     echo "Restart your shell or run:"
-    echo "source $zshrc_file"
+    echo "source $HOME/.zshrc"
 }
 
-install_tmux
-install_clipboard_dependencies
-copy_tmux_config
-configure_tmux_projects
+main

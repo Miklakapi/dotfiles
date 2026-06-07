@@ -2,8 +2,29 @@
 
 set -e
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main () {
+    remove_nvm
+    install_fnm
+    configure_fnm_shell
+    load_fnm
+    install_node
+}
+
+remove_nvm() {
+    remove_nvm_from_shell_configs
+    remove_nvm_directory
+}
+
+remove_nvm_from_shell_configs() {
+    remove_nvm_from_file "$HOME/.bashrc"
+    remove_nvm_from_file "$HOME/.bash_profile"
+    remove_nvm_from_file "$HOME/.profile"
+    remove_nvm_from_file "$HOME/.zshrc"
+    remove_nvm_from_file "$HOME/.zprofile"
 }
 
 remove_nvm_from_file() {
@@ -28,25 +49,12 @@ remove_nvm_from_file() {
     rm -f "$temp_file"
 }
 
-remove_nvm_from_shell_configs() {
-    remove_nvm_from_file "$HOME/.bashrc"
-    remove_nvm_from_file "$HOME/.bash_profile"
-    remove_nvm_from_file "$HOME/.profile"
-    remove_nvm_from_file "$HOME/.zshrc"
-    remove_nvm_from_file "$HOME/.zprofile"
-}
-
 remove_nvm_directory() {
     if [[ ! -d "$HOME/.nvm" ]]; then
         return
     fi
 
     rm -rf "$HOME/.nvm"
-}
-
-remove_nvm() {
-    remove_nvm_from_shell_configs
-    remove_nvm_directory
 }
 
 install_fnm() {
@@ -57,31 +65,28 @@ install_fnm() {
     fi
 
     if command_exists brew; then
-        brew install fnm
+        install_package "fnm"
         return
     fi
 
     if command_exists apt; then
-        sudo apt update
-        sudo apt install -y curl unzip libatomic1
+        install_packages curl unzip libatomic1
         curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell
     fi
 }
 
 configure_fnm_shell() {
-    local zshrc="$HOME/.zshrc"
-    local env_line='eval "$(fnm env --use-on-cd)"'
-    local linux_path_line='export PATH="$HOME/.local/share/fnm:$PATH"'
-
-    touch "$zshrc"
-
-    if command_exists apt && ! grep -Fxq "$linux_path_line" "$zshrc"; then
-        echo "$linux_path_line" >> "$zshrc"
+    if command_exists apt; then
+        append_zsh_block "node" <<'EOF'
+export PATH="$HOME/.local/share/fnm:$PATH"
+eval "$(fnm env --use-on-cd)"
+EOF
+        return
     fi
 
-    if ! grep -Fxq "$env_line" "$zshrc"; then
-        echo "$env_line" >> "$zshrc"
-    fi
+    append_zsh_block "node" <<'EOF'
+eval "$(fnm env --use-on-cd)"
+EOF
 }
 
 load_fnm() {
@@ -103,8 +108,4 @@ install_node() {
     fnm default latest
 }
 
-remove_nvm
-install_fnm
-configure_fnm_shell
-load_fnm
-install_node
+main

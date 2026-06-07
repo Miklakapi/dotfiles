@@ -2,12 +2,16 @@
 
 set -e
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-is_macos() {
-    [[ "$(uname -s)" == "Darwin" ]]
+source "$script_dir/lib/common.sh"
+
+main() {
+    install_zsh
+    set_default_shell
+    configure_zsh_prompt
+    configure_zsh_colors
+    configure_zsh_completion
 }
 
 install_zsh() {
@@ -17,14 +21,11 @@ install_zsh() {
         return
     fi
 
-    if command_exists apt; then
-        sudo apt update
-        sudo apt install -y zsh
-    fi
+    install_package "zsh"
 }
 
 set_default_shell() {
-    local zsh_path
+    local zsh_path=""
 
     if is_macos; then
         return
@@ -49,22 +50,39 @@ set_default_shell() {
 }
 
 configure_zsh_prompt() {
-    local zshrc="$HOME/.zshrc"
-
-    touch "$zshrc"
-
-    if grep -q "PROMPT='%F{green}%n@%m%f %F{blue}%~%f %# '" "$zshrc"; then
-        echo "zsh prompt is already configured"
-        return
-    fi
-
-    {
-        echo ""
-        echo "autoload -Uz colors && colors"
-        echo "PROMPT='%F{green}%n@%m%f %F{blue}%~%f %# '"
-    } >> "$zshrc"
+    append_zsh_block "zsh prompt" <<'EOF'
+autoload -Uz colors && colors
+PROMPT='%F{green}%n@%m%f %F{blue}%~%f %# '
+EOF
 }
 
-install_zsh
-set_default_shell
-configure_zsh_prompt
+configure_zsh_colors() {
+    append_zsh_block "zsh colors" <<'EOF'
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    export CLICOLOR=1
+    alias ls='ls -G'
+else
+    if [[ -x /usr/bin/dircolors ]]; then
+        [[ -r ~/.dircolors ]] && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    fi
+
+    alias ls='ls --color=auto'
+fi
+
+alias grep='grep --color=auto'
+alias fgrep='fgrep --color=auto'
+alias egrep='egrep --color=auto'
+EOF
+}
+
+configure_zsh_completion() {
+    append_zsh_block "zsh completion" <<'EOF'
+autoload -Uz compinit
+compinit
+
+zstyle ':completion:*' menu select
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+EOF
+}
+
+main

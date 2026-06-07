@@ -2,64 +2,74 @@
 
 set -e
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
 nvim_config_repo="https://github.com/Miklakapi/nvim-config.git"
 nvim_config_dir="$HOME/.config/nvim"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-get_linux_arch() {
-    local arch
-
-    arch="$(uname -m)"
-
-    if [[ "$arch" == "x86_64" ]]; then
-        echo "x86_64"
-        return
-    fi
-
-    if [[ "$arch" == "aarch64" ]] || [[ "$arch" == "arm64" ]]; then
-        echo "arm64"
-        return
-    fi
-}
-
-install_brew_package() {
-    local package="$1"
-
-    if brew list "$package" >/dev/null 2>&1; then
-        echo "$package is already installed"
-        return
-    fi
-
-    brew install "$package"
-}
-
-install_apt_package() {
-    local package="$1"
-
-    if dpkg -s "$package" >/dev/null 2>&1; then
-        echo "$package is already installed"
-        return
-    fi
-
-    sudo apt install -y "$package"
+main () {
+    check_git
+    install_nvim_dependencies
+    install_nvim_config
+    configure_nvim_shell
 }
 
 check_git() {
     if command_exists git; then
-        return 0
+        return
     fi
 
     echo "git is required for nvim config"
-    return 1
+    exit 1
+}
+
+install_nvim_dependencies() {
+    install_nvim_dependencies_macos
+    install_nvim_dependencies_ubuntu
+}
+
+install_nvim_dependencies_macos() {
+    if ! command_exists brew; then
+        return
+    fi
+
+    install_packages \
+        neovim \
+        ripgrep \
+        fd \
+        tree-sitter \
+        tree-sitter-cli
+}
+
+install_nvim_dependencies_ubuntu() {
+    if ! command_exists apt; then
+        return
+    fi
+
+    install_packages \
+        curl \
+        unzip \
+        build-essential \
+        ripgrep \
+        fd-find
+
+    install_neovim_linux
+    install_tree_sitter_cli_linux
+    configure_fd_ubuntu
 }
 
 install_neovim_linux() {
-    local arch
-    local nvim_url
-    local nvim_file
+    local arch=""
+    local nvim_file=""
+    local nvim_url=""
+
+    if command_exists nvim; then
+        echo "nvim is already installed"
+        nvim --version | head -n 1
+        return
+    fi
 
     arch="$(get_linux_arch)"
 
@@ -79,10 +89,10 @@ install_neovim_linux() {
 }
 
 install_tree_sitter_cli_linux() {
-    local arch
-    local tree_sitter_arch
-    local tree_sitter_file
-    local tree_sitter_url
+    local arch=""
+    local tree_sitter_arch=""
+    local tree_sitter_file=""
+    local tree_sitter_url=""
 
     if command_exists tree-sitter; then
         echo "tree-sitter is already installed"
@@ -115,41 +125,27 @@ install_tree_sitter_cli_linux() {
     sudo mv /tmp/tree-sitter-cli/tree-sitter /usr/local/bin/tree-sitter
 }
 
-install_nvim_dependencies_macos() {
-    if ! command_exists brew; then
-        return
-    fi
-
-    install_brew_package "neovim"
-    install_brew_package "ripgrep"
-    install_brew_package "fd"
-    install_brew_package "tree-sitter"
-    install_brew_package "tree-sitter-cli"
-}
-
-install_nvim_dependencies_ubuntu() {
-    if ! command_exists apt; then
-        return
-    fi
-
-    install_apt_package "curl"
-    install_apt_package "unzip"
-    install_apt_package "build-essential"
-    install_apt_package "ripgrep"
-    install_apt_package "fd-find"
-
-    install_neovim_linux
-    install_tree_sitter_cli_linux
-
+configure_fd_ubuntu() {
     if command_exists fdfind && ! command_exists fd; then
         mkdir -p "$HOME/.local/bin"
         ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
     fi
 }
 
-install_nvim_dependencies() {
-    install_nvim_dependencies_macos
-    install_nvim_dependencies_ubuntu
+get_linux_arch() {
+    local arch=""
+
+    arch="$(uname -m)"
+
+    if [[ "$arch" == "x86_64" ]]; then
+        echo "x86_64"
+        return
+    fi
+
+    if [[ "$arch" == "aarch64" ]] || [[ "$arch" == "arm64" ]]; then
+        echo "arm64"
+        return
+    fi
 }
 
 install_nvim_config() {
@@ -169,6 +165,10 @@ install_nvim_config() {
     git clone "$nvim_config_repo" "$nvim_config_dir"
 }
 
-check_git
-install_nvim_dependencies
-install_nvim_config
+configure_nvim_shell() {
+    append_zsh_block "nvim" <<'EOF'
+alias vim="nvim"
+EOF
+}
+
+main

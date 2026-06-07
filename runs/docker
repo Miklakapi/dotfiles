@@ -2,47 +2,50 @@
 
 set -e
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main () {
+    check_docker_installed
+    install_docker
+}
+
+check_docker_installed() {
+    if ! command_exists docker; then
+        return
+    fi
+
+    echo "Docker is already installed:"
+    docker --version
+
+    if docker compose version >/dev/null 2>&1; then
+        docker compose version
+    fi
+
+    exit 0
+}
+
+install_docker() {
+    if is_macos; then
+        show_unsupported_system_message
+        exit 0
+    fi
+
+    if is_ubuntu; then
+        install_docker_on_ubuntu
+        exit 0
+    fi
+
+    show_unsupported_system_message
+    exit 1
+}
+
 show_unsupported_system_message() {
     echo "Docker installation is supported only on Ubuntu."
     echo
     echo "On macOS, install Docker Desktop manually:"
     echo "https://docs.docker.com/desktop/setup/install/mac-install/"
-}
-
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-is_macos() {
-    [[ "$(uname -s)" == "Darwin" ]]
-}
-
-is_ubuntu() {
-    [[ -f /etc/os-release ]] && grep -q '^ID=ubuntu$' /etc/os-release
-}
-
-run_as_root() {
-    if [[ "$(id -u)" -eq 0 ]]; then
-        "$@"
-        return
-    fi
-
-    sudo "$@"
-}
-
-start_docker_service() {
-    if ! command_exists systemctl; then
-        echo "systemctl not found. Skipping docker service start."
-        return
-    fi
-
-    if ! systemctl is-system-running >/dev/null 2>&1; then
-        echo "systemd is not running. Skipping docker service start."
-        return
-    fi
-
-    run_as_root systemctl enable docker
-    run_as_root systemctl start docker
 }
 
 install_docker_on_ubuntu() {
@@ -85,14 +88,7 @@ install_docker_on_ubuntu() {
         docker-compose-plugin
 
     start_docker_service
-
-    if ! groups "$USER" | grep -q '\bdocker\b'; then
-        run_as_root usermod -aG docker "$USER"
-
-        echo
-        echo "User '$USER' was added to docker group."
-        echo "Log out and log back in to use docker without sudo."
-    fi
+    configure_docker_group
 
     echo
     echo "Docker installed."
@@ -103,26 +99,40 @@ install_docker_on_ubuntu() {
     fi
 }
 
-if command_exists docker; then
-    echo "Docker is already installed:"
-    docker --version
-
-    if docker compose version >/dev/null 2>&1; then
-        docker compose version
+start_docker_service() {
+    if ! command_exists systemctl; then
+        echo "systemctl not found. Skipping docker service start."
+        return
     fi
 
-    exit 0
-fi
+    if ! systemctl is-system-running >/dev/null 2>&1; then
+        echo "systemd is not running. Skipping docker service start."
+        return
+    fi
 
-if is_macos; then
-    show_unsupported_system_message
-    exit 0
-fi
+    run_as_root systemctl enable docker
+    run_as_root systemctl start docker
+}
 
-if is_ubuntu; then
-    install_docker_on_ubuntu
-    exit 0
-fi
+configure_docker_group() {
+    if groups "$USER" | grep -q '\bdocker\b'; then
+        return
+    fi
 
-show_unsupported_system_message
-exit 1
+    run_as_root usermod -aG docker "$USER"
+
+    echo
+    echo "User '$USER' was added to docker group."
+    echo "Log out and log back in to use docker without sudo."
+}
+
+run_as_root() {
+    if [[ "$(id -u)" -eq 0 ]]; then
+        "$@"
+        return
+    fi
+
+    sudo "$@"
+}
+
+main

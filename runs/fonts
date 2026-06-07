@@ -2,14 +2,23 @@
 
 set -e
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
 font_name="JetBrainsMono"
 font_version="v3.4.0"
 font_dir="$HOME/.local/share/fonts"
 font_zip="/tmp/JetBrainsMono.zip"
 font_url="https://github.com/ryanoasis/nerd-fonts/releases/download/$font_version/JetBrainsMono.zip"
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+main () {
+    install_fonts
+}
+
+install_fonts() {
+    install_fonts_macos
+    install_fonts_linux
 }
 
 install_fonts_macos() {
@@ -30,12 +39,12 @@ install_fonts_linux() {
         return
     fi
 
-    if fc-list | grep -qi "JetBrainsMono Nerd Font"; then
+    if fc-list | grep -qi "$font_name Nerd Font"; then
         echo "JetBrains Mono Nerd Font is already installed"
         return
     fi
 
-    sudo apt install -y curl unzip fontconfig
+    install_packages curl unzip fontconfig
 
     mkdir -p "$font_dir"
     curl -fsSL "$font_url" -o "$font_zip"
@@ -43,9 +52,4 @@ install_fonts_linux() {
     fc-cache -fv
 }
 
-install_fonts() {
-    install_fonts_macos
-    install_fonts_linux
-}
-
-install_fonts
+main

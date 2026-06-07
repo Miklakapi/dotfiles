@@ -2,8 +2,15 @@
 
 set -e
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    install_uv
+    load_uv
+    install_python
+    configure_uv_shell
 }
 
 install_uv() {
@@ -14,11 +21,7 @@ install_uv() {
     fi
 
     if ! command_exists curl; then
-        if command_exists apt; then
-            sudo apt install -y curl
-        else
-            return
-        fi
+        install_package "curl"
     fi
 
     curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -26,20 +29,6 @@ install_uv() {
 
 load_uv() {
     export PATH="$HOME/.local/bin:$PATH"
-}
-
-configure_uv_shell() {
-    local zshrc="$HOME/.zshrc"
-    local line='source "$HOME/.local/bin/env"'
-
-    touch "$zshrc"
-
-    if grep -Fxq "$line" "$zshrc"; then
-        echo "uv is already configured in .zshrc"
-        return
-    fi
-
-    echo "$line" >> "$zshrc"
 }
 
 install_python() {
@@ -50,7 +39,17 @@ install_python() {
     uv python install
 }
 
-install_uv
-load_uv
-configure_uv_shell
-install_python
+configure_uv_shell() {
+    remove_uv_shell_lines
+
+    append_zsh_block "python" <<'EOF'
+[ -f "$HOME/.local/bin/env" ] && source "$HOME/.local/bin/env"
+EOF
+}
+
+remove_uv_shell_lines() {
+    remove_zsh_line '. "$HOME/.local/bin/env"'
+    remove_zsh_line 'source "$HOME/.local/bin/env"'
+}
+
+main

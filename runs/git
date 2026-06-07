@@ -2,8 +2,14 @@
 
 set -e
 
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    install_git
+    configure_git
+    configure_repo_clone
 }
 
 install_git() {
@@ -13,19 +19,18 @@ install_git() {
         return
     fi
 
-    if command_exists brew; then
-        brew install git
+    install_package "git"
+}
+
+configure_git() {
+    if ! command_exists git; then
         return
     fi
 
-    if command_exists apt; then
-        sudo apt update
-        sudo apt install -y git
-        return
-    fi
+    git config --global pull.rebase true
 
-    echo "Could not install git. Missing supported package manager: brew or apt"
-    exit 1
+    ask_git_config "user.name" "Git user name"
+    ask_git_config "user.email" "Git user email"
 }
 
 ask_git_config() {
@@ -50,53 +55,15 @@ ask_git_config() {
     git config --global "$key" "$new_value"
 }
 
-configure_git() {
-    if ! command_exists git; then
-        return
-    fi
-
-    git config --global pull.rebase true
-
-    ask_git_config "user.name" "Git user name"
-    ask_git_config "user.email" "Git user email"
-}
-
-remove_repo_clone_config() {
-    local zshrc_file="$HOME/.zshrc"
-
-    if [[ ! -f "$zshrc_file" ]]; then
-        return
-    fi
-
-    sed -i.bak '/^export GITHUB_OWNER=/d' "$zshrc_file"
-    sed -i.bak '/^export REPO_CLONE_DIR=/d' "$zshrc_file"
-}
-
-has_repo_clone_config() {
-    local zshrc_file="$HOME/.zshrc"
-
-    if [[ ! -f "$zshrc_file" ]]; then
-        return 1
-    fi
-
-    grep -q '^export GITHUB_OWNER=' "$zshrc_file" && return 0
-    grep -q '^export REPO_CLONE_DIR=' "$zshrc_file" && return 0
-
-    return 1
-}
-
-show_repo_clone_config() {
-    local zshrc_file="$HOME/.zshrc"
-
-    grep '^export GITHUB_OWNER=' "$zshrc_file" || true
-    grep '^export REPO_CLONE_DIR=' "$zshrc_file" || true
-}
-
 configure_repo_clone() {
-    local zshrc_file="$HOME/.zshrc"
     local answer=""
     local github_owner=""
     local repo_clone_dir=""
+
+    if has_zsh_block "git"; then
+        echo "git zsh config is already configured"
+        return
+    fi
 
     read -r -p "Configure repo-clone? [y/N] " answer
 
@@ -107,23 +74,6 @@ configure_repo_clone() {
             return
             ;;
     esac
-
-    if has_repo_clone_config; then
-        echo "repo-clone config is already configured in $zshrc_file:"
-        show_repo_clone_config
-
-        read -r -p "Overwrite it? [y/N] " answer
-
-        case "$answer" in
-            y|Y|yes|YES) ;;
-            *)
-                echo "repo-clone config was not changed."
-                return
-                ;;
-        esac
-
-        remove_repo_clone_config
-    fi
 
     echo "Enter GitHub username used by repo-clone:"
     echo "Example: Miklakapi"
@@ -139,21 +89,14 @@ configure_repo_clone() {
         return
     fi
 
-    touch "$zshrc_file"
+    append_zsh_block "git" <<EOF
+export GITHUB_OWNER="$github_owner"
+export REPO_CLONE_DIR="$repo_clone_dir"
+EOF
 
-    if [[ -n "$github_owner" ]]; then
-        printf '\nexport GITHUB_OWNER="%s"\n' "$github_owner" >> "$zshrc_file"
-    fi
-
-    if [[ -n "$repo_clone_dir" ]]; then
-        printf 'export REPO_CLONE_DIR="%s"\n' "$repo_clone_dir" >> "$zshrc_file"
-    fi
-
-    echo "repo-clone config saved to $zshrc_file"
+    echo "git zsh config saved to $HOME/.zshrc"
     echo "Restart your shell or run:"
-    echo "source $zshrc_file"
+    echo "source $HOME/.zshrc"
 }
 
-install_git
-configure_git
-configure_repo_clone
+main
