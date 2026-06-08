@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+docker_wait_seconds="${DOCKER_WAIT_SECONDS:-60}"
+
+main() {
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+        show_usage
+        return
+    fi
+
+    ensure_docker
+}
+
+show_usage() {
+    echo "Usage: ensure-docker"
+    echo
+    echo "Ensures Docker daemon is running."
+    echo
+    echo "On macOS it starts Docker Desktop if needed."
+    echo "On Linux it checks Docker and shows a message if it is not running."
+    echo
+    echo "Environment variables:"
+    echo "  DOCKER_WAIT_SECONDS  How long to wait for Docker to start. Default: 60"
+}
+
+ensure_docker() {
+    require_command docker
+
+    if docker_is_running; then
+        echo "Docker is running."
+        return
+    fi
+
+    if is_macos; then
+        start_docker_desktop
+        wait_for_docker
+        return
+    fi
+
+    show_docker_not_running_error
+    return 1
+}
+
+docker_is_running() {
+    docker info >/dev/null 2>&1
+}
+
+start_docker_desktop() {
+    echo "Docker is not running."
+    echo "Starting Docker Desktop..."
+
+    require_command open
+
+    open --background -a Docker
+}
+
+wait_for_docker() {
+    local elapsed_seconds=0
+
+    echo "Waiting for Docker..."
+
+    while [[ "$elapsed_seconds" -lt "$docker_wait_seconds" ]]; do
+        if docker_is_running; then
+            echo "Docker is running."
+            return
+        fi
+
+        sleep 1
+        elapsed_seconds=$((elapsed_seconds + 1))
+    done
+
+    echo "Docker did not start within ${docker_wait_seconds}s." >&2
+    echo "Open Docker Desktop manually and try again." >&2
+
+    return 1
+}
+
+show_docker_not_running_error() {
+    echo "Docker is not running." >&2
+    echo
+    echo "Start Docker manually and try again." >&2
+
+    if command_exists systemctl; then
+        echo
+        echo "For example:" >&2
+        echo "  sudo systemctl start docker" >&2
+    fi
+}
+
+main "$@"
