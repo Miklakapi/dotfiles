@@ -58,14 +58,62 @@ kill_sessions() {
         fi
 
         kill_session "$session_name"
-    done <<< "$selected_sessions"
+    done <<<"$selected_sessions"
 }
 
 kill_session() {
     local session_name="$1"
 
+    run_tmux_close_if_needed "$session_name"
+
     tmux kill-session -t "$session_name"
     echo "Killed session: $session_name"
+}
+
+run_tmux_close_if_needed() {
+    local session_name="$1"
+    local project_root=""
+    local close_script=""
+
+    project_root="$(get_session_project_root "$session_name")"
+
+    if [[ -z "$project_root" ]]; then
+        return
+    fi
+
+    close_script="$project_root/.tmux-close"
+
+    if [[ ! -f "$close_script" ]]; then
+        return
+    fi
+
+    if [[ ! -x "$close_script" ]]; then
+        echo ".tmux-close exists but is not executable:" >&2
+        echo "  $close_script" >&2
+        echo
+        echo "Run:" >&2
+        echo "  chmod +x .tmux-close" >&2
+        return 1
+    fi
+
+    echo "Running .tmux-close for session: $session_name"
+
+    (
+        cd "$project_root"
+        "$close_script"
+    )
+}
+
+get_session_project_root() {
+    local session_name="$1"
+    local project_root=""
+
+    project_root="$(
+        tmux show-environment -t "$session_name" TMUX_PROJECT_ROOT 2>/dev/null |
+            sed 's/^TMUX_PROJECT_ROOT=//'
+    )"
+
+    echo "$project_root"
 }
 
 main "$@"
