@@ -3,6 +3,8 @@
 set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+dotfiles_bin="$script_dir/bin"
+tmux_session_command="$dotfiles_bin/tmux-session"
 
 source "$script_dir/lib/common.sh"
 
@@ -29,7 +31,8 @@ main() {
     fi
 
     target_pane="$(create_session "$selected_name" "$selected")"
-    run_session_setup "$target_pane"
+    configure_session_project_env "$selected_name" "$selected"
+    run_session_setup "$target_pane" "$selected"
     switch_to_session "$selected_name"
 }
 
@@ -71,7 +74,7 @@ select_project() {
                 --delimiter=$'\t' \
                 --with-nth=2,3 \
                 --layout=reverse \
-                --header="󰓩 open tmux session | 󰒓 local .tmux-session"
+                --header="󰓩 open tmux session | 󰒓 local .tmux-session | 󰣖 local ./bin"
     )"
 
     echo "${selected##*$'\t'}"
@@ -130,6 +133,7 @@ format_project() {
     local session_name=""
     local session_marker=" "
     local config_marker=" "
+    local bin_marker=" "
     local sort_group="9"
 
     session_name="$(create_session_name "$project")"
@@ -143,13 +147,23 @@ format_project() {
         config_marker="󰒓"
     fi
 
-    printf "%s\t%s %s\t%s\n" "$sort_group" "$session_marker" "$config_marker" "$project"
+    if has_local_bin "$project"; then
+        bin_marker="󰣖"
+    fi
+
+    printf "%s\t%s %s %s\t%s\n" "$sort_group" "$session_marker" "$config_marker" "$bin_marker" "$project"
 }
 
 has_local_session_config() {
     local project="$1"
 
     [[ -x "$project/.tmux-session" ]]
+}
+
+has_local_bin() {
+    local project="$1"
+
+    [[ -d "$project/bin" ]]
 }
 
 get_open_sessions() {
@@ -205,10 +219,138 @@ create_session() {
     tmux new-session -ds "$session_name" -c "$selected" -P -F "#{pane_id}"
 }
 
+configure_session_project_env() {
+    local session_name="$1"
+    local selected="$2"
+    local project_bin="$selected/bin"
+    local current_path=""
+
+    current_path="$(get_session_path "$session_name")"
+    current_path="$(create_project_clean_path "$project_bin" "$current_path")"
+
+    tmux set-environment -t "$session_name" TMUX_PROJECT_ROOT "$selected"
+
+    if [[ ! -d "$project_bin" ]]; then
+        tmux set-environment -u -t "$session_name" TMUX_PROJECT_BIN 2>/dev/null || true
+        tmux set-environment -t "$session_name" PATH "$current_path"
+        return
+    fi
+
+    tmux set-environment -t "$session_name" TMUX_PROJECT_BIN "$project_bin"
+    tmux set-environment -t "$session_name" PATH "$(prepend_to_path "$project_bin" "$current_path")"
+}
+
+get_session_path() {
+    local session_name="$1"
+    local current_path=""
+
+    current_path="$(tmux show-environment -t "$session_name" PATH 2>/dev/null | sed 's/^PATH=//' || true)"
+
+    if [[ -n "$current_path" ]]; then
+        echo "$current_path"
+        return
+    fi
+
+    echo "$PATH"
+}
+
+create_project_clean_path() {
+    local project_bin="$1"
+    local current_path="$2"
+    local previous_project_bin="${TMUX_PROJECT_BIN:-}"
+
+    if [[ -n "$previous_project_bin" && "$previous_project_bin" != "$dotfiles_bin" ]]; then
+        current_path="$(remove_from_path "$previous_project_bin" "$current_path")"
+    fi
+
+    if [[ -n "$project_bin" && "$project_bin" != "$dotfiles_bin" ]]; then
+        current_path="$(remove_from_path "$project_bin" "$current_path")"
+    fi
+
+    echo "$current_path"
+}
+
+prepend_to_path() {
+    local path_to_add="$1"
+    local current_path="$2"
+
+    if [[ -z "$path_to_add" ]]; then
+        echo "$current_path"
+        return
+    fi
+
+    if [[ -z "$current_path" ]]; then
+        echo "$path_to_add"
+        return
+    fi
+
+    case ":$current_path:" in
+        *":$path_to_add:"*)
+            echo "$current_path"
+            return
+            ;;
+    esac
+
+    echo "$path_to_add:$current_path"
+}
+
+remove_from_path() {
+    local path_to_remove="$1"
+    local current_path="$2"
+    local clean_path=""
+    local path_part=""
+
+    if [[ -z "$path_to_remove" ]]; then
+        echo "$current_path"
+        return
+    fi
+
+    IFS=":" read -ra path_parts <<< "$current_path"
+
+    for path_part in "${path_parts[@]}"; do
+        if [[ "$path_part" == "$path_to_remove" ]]; then
+            continue
+        fi
+
+        if [[ -z "$clean_path" ]]; then
+            clean_path="$path_part"
+            continue
+        fi
+
+        clean_path="$clean_path:$path_part"
+    done
+
+    echo "$clean_path"
+}
+
 run_session_setup() {
     local target_pane="$1"
+    local selected="$2"
+    local project_bin="$selected/bin"
+    local clean_path=""
+    local final_path=""
+    local escaped_selected=""
+    local escaped_project_bin=""
+    local escaped_final_path=""
+    local escaped_tmux_session_command=""
 
-    tmux send-keys -t "$target_pane" "tmux-session && clear" C-m
+    clean_path="$(create_project_clean_path "$project_bin" "$PATH")"
+
+    printf -v escaped_selected "%q" "$selected"
+    printf -v escaped_project_bin "%q" "$project_bin"
+    printf -v escaped_tmux_session_command "%q" "$tmux_session_command"
+
+    if [[ -d "$project_bin" ]]; then
+        final_path="$(prepend_to_path "$project_bin" "$clean_path")"
+        printf -v escaped_final_path "%q" "$final_path"
+
+        tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; export TMUX_PROJECT_BIN=$escaped_project_bin; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
+        return
+    fi
+
+    printf -v escaped_final_path "%q" "$clean_path"
+
+    tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; unset TMUX_PROJECT_BIN; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
 }
 
 main "$@"

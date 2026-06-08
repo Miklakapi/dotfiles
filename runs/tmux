@@ -108,6 +108,13 @@ configure_tmux_projects() {
     append_zsh_block "tmux" <<EOF
 export TMUX_PROJECT_DIRS="$project_dirs"
 export TMUX_PROJECTS="$projects"
+
+if [[ -n "\$TMUX" && -n "\$TMUX_PROJECT_BIN" && -d "\$TMUX_PROJECT_BIN" ]]; then
+    case ":\$PATH:" in
+        *":\$TMUX_PROJECT_BIN:"*) ;;
+        *) export PATH="\$TMUX_PROJECT_BIN:\$PATH" ;;
+    esac
+fi
 EOF
 
     echo "tmux projects config saved to $HOME/.zshrc"
