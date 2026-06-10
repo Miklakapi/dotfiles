@@ -1,0 +1,418 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local previous_index=""
+    local repo_root=""
+    local repo_name=""
+    local base_ref=""
+    local current_ref=""
+    local range_start=""
+    local range_end=""
+    local range_title=""
+
+    if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+        show_usage
+        return
+    fi
+
+    previous_index="$(parse_previous_index "$@")"
+
+    require_dependencies
+    require_git_repo
+
+    repo_root="$(get_repo_root)"
+    repo_name="$(basename "$repo_root")"
+    base_ref="$(get_base_ref)"
+    current_ref="$(get_current_ref)"
+
+    cd "$repo_root"
+
+    if [[ -n "$previous_index" ]]; then
+        range_start="$(get_previous_range_start "$base_ref" "$previous_index")"
+        range_end="$(get_previous_range_end "$base_ref" "$previous_index")"
+        range_title="previous production range #$previous_index"
+    else
+        range_start="$base_ref"
+        range_end="HEAD"
+        range_title="current branch to production"
+    fi
+
+    print_report "$repo_name" "$base_ref" "$current_ref" "$range_start" "$range_end" "$range_title"
+}
+
+show_usage() {
+    echo "Usage: prod-preview [--previous [number]]"
+    echo
+    echo "Examples:"
+    echo "  prod-preview"
+    echo "  prod-preview --previous"
+    echo "  prod-preview --previous 2"
+    echo
+    echo "Description:"
+    echo "  Shows commits and summary of changes that will reach production."
+    echo "  By default it compares current branch to main/master."
+    echo "  With --previous it shows historical merge ranges on main/master."
+}
+
+parse_previous_index() {
+    local arg=""
+    local next_arg=""
+
+    while [[ "$#" -gt 0 ]]; do
+        arg="$1"
+
+        case "$arg" in
+        --previous)
+            next_arg="${2:-}"
+
+            if [[ -n "$next_arg" && "$next_arg" != -* ]]; then
+                require_number "$next_arg"
+                echo "$next_arg"
+                return
+            fi
+
+            echo "1"
+            return
+            ;;
+        --previous=*)
+            next_arg="${arg#--previous=}"
+            require_number "$next_arg"
+            echo "$next_arg"
+            return
+            ;;
+        *)
+            echo "Unknown argument: $arg" >&2
+            show_usage >&2
+            return 1
+            ;;
+        esac
+
+        shift
+    done
+}
+
+require_dependencies() {
+    require_command git
+}
+
+require_git_repo() {
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Current directory is not inside a git repository." >&2
+    return 1
+}
+
+require_number() {
+    local value="$1"
+
+    if [[ "$value" =~ ^[0-9]+$ && "$value" -gt 0 ]]; then
+        return
+    fi
+
+    echo "Expected positive number, got: $value" >&2
+    return 1
+}
+
+get_repo_root() {
+    git rev-parse --show-toplevel
+}
+
+get_base_ref() {
+    if git show-ref --verify --quiet refs/remotes/origin/main; then
+        echo "origin/main"
+        return
+    fi
+
+    if git show-ref --verify --quiet refs/remotes/origin/master; then
+        echo "origin/master"
+        return
+    fi
+
+    if git show-ref --verify --quiet refs/heads/main; then
+        echo "main"
+        return
+    fi
+
+    if git show-ref --verify --quiet refs/heads/master; then
+        echo "master"
+        return
+    fi
+
+    echo "Could not find main or master branch." >&2
+    return 1
+}
+
+get_current_ref() {
+    local current_ref=""
+
+    current_ref="$(git branch --show-current 2>/dev/null || true)"
+
+    if [[ -n "$current_ref" ]]; then
+        echo "$current_ref"
+        return
+    fi
+
+    git rev-parse --short HEAD
+}
+
+get_previous_range_start() {
+    local base_ref="$1"
+    local previous_index="$2"
+    local merge_commit=""
+
+    merge_commit="$(get_merge_commit_by_index "$base_ref" "$previous_index")"
+
+    if [[ -n "$merge_commit" ]]; then
+        echo "$merge_commit"
+        return
+    fi
+
+    echo "Could not find previous merge #$previous_index on $base_ref." >&2
+    return 1
+}
+
+get_previous_range_end() {
+    local base_ref="$1"
+    local previous_index="$2"
+    local merge_index=""
+
+    merge_index="$((previous_index - 1))"
+
+    get_merge_commit_by_index "$base_ref" "$merge_index"
+}
+
+get_merge_commit_by_index() {
+    local base_ref="$1"
+    local merge_index="$2"
+
+    git log \
+        --first-parent \
+        --merges \
+        --pretty=format:%H \
+        "$base_ref" |
+        sed -n "$((merge_index + 1))p"
+}
+
+print_report() {
+    local repo_name="$1"
+    local base_ref="$2"
+    local current_ref="$3"
+    local range_start="$4"
+    local range_end="$5"
+    local range_title="$6"
+    local range="$range_start..$range_end"
+
+    echo "Production preview"
+    echo "Repository: $repo_name"
+    echo "Base: $base_ref"
+    echo "Current: $current_ref"
+    echo "Range: $range_title"
+    echo
+
+    print_summary "$range_start" "$range_end" "$range"
+    echo
+
+    print_commits "$range"
+}
+
+print_summary() {
+    local range_start="$1"
+    local range_end="$2"
+    local range="$3"
+    local commit_count=""
+    local shortstat=""
+
+    commit_count="$(git rev-list --count "$range" 2>/dev/null || echo "0")"
+    shortstat="$(git diff --shortstat "$range_start" "$range_end" || true)"
+
+    echo "Summary:"
+    echo "  Commits: $commit_count"
+
+    if [[ -n "$shortstat" ]]; then
+        echo "  Changes: $shortstat"
+        return
+    fi
+
+    echo "  Changes: no file changes"
+}
+
+print_commits() {
+    local range="$1"
+    local commits=""
+    local commit_hash=""
+    local commit_date=""
+    local commit_subject=""
+
+    commits="$(get_commits "$range")"
+
+    echo "Commits:"
+
+    if [[ -z "$commits" ]]; then
+        echo "  No commits found"
+        return
+    fi
+
+    while IFS=$'\t' read -r commit_hash commit_date commit_subject; do
+        print_commit_line "$commit_date" "$commit_subject"
+        print_commit_submodules "$commit_hash"
+    done <<<"$commits"
+}
+
+get_commits() {
+    local range="$1"
+
+    git log \
+        --date=format:'%Y-%m-%d %H:%M' \
+        --pretty=format:'%H%x09%ad%x09%s' \
+        "$range" \
+        2>/dev/null || true
+}
+
+print_commit_line() {
+    local commit_date="$1"
+    local commit_subject="$2"
+
+    echo "  $commit_date  $commit_subject"
+}
+
+print_commit_submodules() {
+    local commit_hash="$1"
+    local submodule_changes=""
+    local line=""
+
+    submodule_changes="$(get_commit_submodule_changes "$commit_hash")"
+
+    if [[ -z "$submodule_changes" ]]; then
+        return
+    fi
+
+    while IFS= read -r line; do
+        print_submodule_change "$line"
+    done <<<"$submodule_changes"
+}
+
+get_commit_submodule_changes() {
+    local commit_hash="$1"
+
+    git show \
+        --raw \
+        --format= \
+        "$commit_hash" \
+        2>/dev/null |
+        grep '^:.*160000' || true
+}
+
+print_submodule_change() {
+    local line="$1"
+    local meta=""
+    local path=""
+    local source_mode=""
+    local target_mode=""
+    local old_commit=""
+    local new_commit=""
+    local status=""
+
+    meta="${line%%$'\t'*}"
+    path="${line#*$'\t'}"
+
+    read -r source_mode target_mode old_commit new_commit status <<<"$meta"
+
+    if [[ "$source_mode" != ":160000" && "$target_mode" != "160000" ]]; then
+        return
+    fi
+
+    if [[ ! -d "$path" ]]; then
+        print_submodule_note "$path: submodule directory is missing locally"
+        return
+    fi
+
+    print_submodule_commits "$path" "$old_commit" "$new_commit"
+}
+
+print_submodule_commits() {
+    local path="$1"
+    local old_commit="$2"
+    local new_commit="$3"
+    local range="$old_commit..$new_commit"
+    local commits=""
+
+    if is_empty_git_commit "$old_commit"; then
+        print_submodule_note "$path: added submodule at $new_commit"
+        return
+    fi
+
+    if is_empty_git_commit "$new_commit"; then
+        print_submodule_note "$path: removed submodule from $old_commit"
+        return
+    fi
+
+    if ! git -C "$path" cat-file -e "$old_commit^{commit}" 2>/dev/null; then
+        print_submodule_note "$path: missing old commit locally $old_commit"
+        return
+    fi
+
+    if ! git -C "$path" cat-file -e "$new_commit^{commit}" 2>/dev/null; then
+        print_submodule_note "$path: missing new commit locally $new_commit"
+        return
+    fi
+
+    commits="$(get_submodule_commits "$path" "$range")"
+
+    if [[ -z "$commits" ]]; then
+        print_submodule_note "$path: pointer changed $old_commit -> $new_commit"
+        return
+    fi
+
+    print_colored_text "$submodule_color" "    └─ $path"
+    echo "$commits" | while IFS=$'\t' read -r commit_date commit_subject; do
+        print_colored_text "$submodule_color" "       $commit_date  $commit_subject"
+    done
+}
+
+get_submodule_commits() {
+    local path="$1"
+    local range="$2"
+
+    git -C "$path" log \
+        --date=format:'%Y-%m-%d %H:%M' \
+        --pretty=format:'%ad%x09%s' \
+        "$range" \
+        2>/dev/null || true
+}
+
+print_submodule_note() {
+    local text="$1"
+
+    print_colored_text "$submodule_color" "    └─ $text"
+}
+
+print_colored_text() {
+    local color="$1"
+    local text="$2"
+
+    if [[ -t 1 && -n "$color" ]]; then
+        printf "%b%s%b\n" "$color" "$text" "$reset_color"
+        return
+    fi
+
+    echo "$text"
+}
+
+is_empty_git_commit() {
+    local commit="$1"
+
+    [[ "$commit" =~ ^0+$ ]]
+}
+
+submodule_color=$'\033[36m'
+reset_color=$'\033[0m'
+
+main "$@"
