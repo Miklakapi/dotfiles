@@ -68,13 +68,13 @@ select_project() {
 
     open_sessions="$(get_open_sessions)"
     selected="$(
-        find_projects "$open_sessions" \
-            | sort -t $'\t' -k1,1n -k3,3 \
-            | env FZF_DEFAULT_OPTS= fzf \
+        find_projects "$open_sessions" |
+            sort -t $'\t' -k1,1n -k3,3 |
+            env FZF_DEFAULT_OPTS= fzf \
                 --delimiter=$'\t' \
                 --with-nth=2,3 \
                 --layout=reverse \
-                --header="󰓩 open tmux session | 󰒓 local .tmux-session | 󰣖 local ./bin"
+                --header="󰓩 open tmux session | 󰊢 git repo | 󰒓 local .tmux-session | 󰣖 local ./bin"
     )"
 
     echo "${selected##*$'\t'}"
@@ -86,7 +86,7 @@ find_projects() {
     local project=""
 
     if [[ -n "$TMUX_PROJECT_DIRS" ]]; then
-        IFS=":" read -ra project_dirs <<< "$TMUX_PROJECT_DIRS"
+        IFS=":" read -ra project_dirs <<<"$TMUX_PROJECT_DIRS"
 
         for project_dir in "${project_dirs[@]}"; do
             find_projects_in_dir "$project_dir" "$open_sessions"
@@ -94,7 +94,7 @@ find_projects() {
     fi
 
     if [[ -n "$TMUX_PROJECTS" ]]; then
-        IFS=":" read -ra projects <<< "$TMUX_PROJECTS"
+        IFS=":" read -ra projects <<<"$TMUX_PROJECTS"
 
         for project in "${projects[@]}"; do
             format_project_if_valid "$project" "$open_sessions"
@@ -132,6 +132,7 @@ format_project() {
     local open_sessions="$2"
     local session_name=""
     local session_marker=" "
+    local git_marker=" "
     local config_marker=" "
     local bin_marker=" "
     local sort_group="9"
@@ -143,6 +144,10 @@ format_project() {
         sort_group="0"
     fi
 
+    if has_git_repo "$project"; then
+        git_marker="󰊢"
+    fi
+
     if has_local_session_config "$project"; then
         config_marker="󰒓"
     fi
@@ -151,7 +156,13 @@ format_project() {
         bin_marker="󰣖"
     fi
 
-    printf "%s\t%s %s %s\t%s\n" "$sort_group" "$session_marker" "$config_marker" "$bin_marker" "$project"
+    printf "%s\t%s %s %s %s\t%s\n" "$sort_group" "$session_marker" "$git_marker" "$config_marker" "$bin_marker" "$project"
+}
+
+has_git_repo() {
+    local project="$1"
+
+    [[ -e "$project/.git" ]]
 }
 
 has_local_session_config() {
@@ -285,10 +296,10 @@ prepend_to_path() {
     fi
 
     case ":$current_path:" in
-        *":$path_to_add:"*)
-            echo "$current_path"
-            return
-            ;;
+    *":$path_to_add:"*)
+        echo "$current_path"
+        return
+        ;;
     esac
 
     echo "$path_to_add:$current_path"
@@ -305,7 +316,7 @@ remove_from_path() {
         return
     fi
 
-    IFS=":" read -ra path_parts <<< "$current_path"
+    IFS=":" read -ra path_parts <<<"$current_path"
 
     for path_part in "${path_parts[@]}"; do
         if [[ "$path_part" == "$path_to_remove" ]]; then
