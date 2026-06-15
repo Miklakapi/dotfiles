@@ -27,10 +27,21 @@ configure_git() {
         return
     fi
 
-    git config --global pull.rebase true
+    configure_git_defaults
 
     ask_git_config "user.name" "Git user name"
     ask_git_config "user.email" "Git user email"
+}
+
+configure_git_defaults() {
+    git config --global pull.rebase true
+    git config --global rebase.autoStash true
+    git config --global fetch.prune true
+    git config --global init.defaultBranch main
+    git config --global push.autoSetupRemote true
+    git config --global diff.algorithm histogram
+
+    echo "git defaults configured"
 }
 
 ask_git_config() {
@@ -68,11 +79,11 @@ configure_repo_clone() {
     read -r -p "Configure repo-clone? [y/N] " answer
 
     case "$answer" in
-        y|Y|yes|YES) ;;
-        *)
-            echo "repo-clone config was not changed."
-            return
-            ;;
+    y | Y | yes | YES) ;;
+    *)
+        echo "repo-clone config was not changed."
+        return
+        ;;
     esac
 
     echo "Enter GitHub username used by repo-clone:"
@@ -99,4 +110,4 @@ EOF
     echo "source $HOME/.zshrc"
 }
 
-main
+main "$@"
