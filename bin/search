@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local query="$1"
+
+    require_command rg
+    require_command fzf
+    require_command bat
+
+    search_content "$query"
+}
+
+get_editor_command() {
+    if [[ -n "$VISUAL" ]]; then
+        echo "$VISUAL"
+        return
+    fi
+
+    if [[ -n "$EDITOR" ]]; then
+        echo "$EDITOR"
+        return
+    fi
+
+    if command_exists nvim; then
+        echo "nvim"
+        return
+    fi
+
+    if command_exists vim; then
+        echo "vim"
+        return
+    fi
+
+    echo ""
+}
+
+open_search_result() {
+    local result="$1"
+    local editor=""
+    local file=""
+    local line=""
+    local column=""
+    local content=""
+
+    if [[ -z "$result" ]]; then
+        return
+    fi
+
+    IFS=":" read -r file line column content <<<"$result"
+
+    if [[ -z "$file" || -z "$line" ]]; then
+        echo "$result"
+        return
+    fi
+
+    editor="$(get_editor_command)"
+
+    if [[ -z "$editor" ]]; then
+        echo "$file:$line:$column:$content"
+        return
+    fi
+
+    "$editor" +"$line" "$file"
+}
+
+search_content() {
+    local query="$1"
+    local rg_prefix="rg --column --line-number --no-heading --color=never --smart-case"
+    local result=""
+
+    result="$(
+        fzf \
+            --disabled \
+            --query "$query" \
+            --bind "start:reload:$rg_prefix {q} . || true" \
+            --bind "change:reload:$rg_prefix {q} . || true" \
+            --delimiter ":" \
+            --preview "bat --style=numbers --color=always --highlight-line {2} {1}" \
+            --preview-window "right:60%:wrap" \
+            --phony
+    )"
+
+    open_search_result "$result"
+}
+
+main "$@"
