@@ -1,0 +1,354 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    print_network_info
+}
+
+print_network_info() {
+    echo "Network"
+    echo "-------"
+    echo ""
+
+    print_value "Status" "$(get_status)"
+    print_value "Connection" "$(get_connection_type)"
+    print_value "Wi-Fi name" "$(get_wifi_name)"
+    print_value "Local IP" "$(get_local_ip)"
+    print_value "Public IP" "$(get_public_ip)"
+    print_value "Gateway" "$(get_gateway)"
+    print_value "DNS" "$(get_dns_servers)"
+    print_value "MAC address" "$(get_mac_address)"
+}
+
+get_status() {
+    local gateway=""
+
+    gateway="$(get_gateway)"
+
+    if [[ -n "$gateway" && "$gateway" != "-" ]]; then
+        echo "online"
+        return
+    fi
+
+    echo "offline"
+}
+
+get_connection_type() {
+    if is_macos; then
+        get_macos_connection_type
+        return
+    fi
+
+    get_linux_connection_type
+}
+
+get_wifi_name() {
+    if is_macos; then
+        get_macos_wifi_name
+        return
+    fi
+
+    get_linux_wifi_name
+}
+
+get_local_ip() {
+    if is_macos; then
+        get_macos_local_ip
+        return
+    fi
+
+    get_linux_local_ip
+}
+
+get_public_ip() {
+    if ! command_exists curl; then
+        echo "-"
+        return
+    fi
+
+    curl -fsS --max-time 3 https://api.ipify.org 2>/dev/null || echo "-"
+}
+
+get_gateway() {
+    if is_macos; then
+        get_macos_gateway
+        return
+    fi
+
+    get_linux_gateway
+}
+
+get_dns_servers() {
+    if is_macos; then
+        get_macos_dns_servers
+        return
+    fi
+
+    get_linux_dns_servers
+}
+
+get_mac_address() {
+    if is_macos; then
+        get_macos_mac_address
+        return
+    fi
+
+    get_linux_mac_address
+}
+
+get_default_interface() {
+    if is_macos; then
+        get_macos_default_interface
+        return
+    fi
+
+    get_linux_default_interface
+}
+
+print_value() {
+    local label="$1"
+    local value="$2"
+
+    if [[ -z "$value" ]]; then
+        value="-"
+    fi
+
+    printf "%-13s %s\n" "$label:" "$value"
+}
+
+get_macos_connection_type() {
+    local wifi_device=""
+
+    wifi_device="$(get_macos_wifi_device)"
+
+    if [[ -n "$wifi_device" ]] && networksetup -getairportpower "$wifi_device" 2>/dev/null | grep -q "On"; then
+        echo "Wi-Fi"
+        return
+    fi
+
+    echo "Unknown"
+}
+
+get_macos_wifi_name() {
+    local wifi_device=""
+    local wifi_name=""
+
+    wifi_device="$(get_macos_wifi_device)"
+
+    if [[ -z "$wifi_device" ]]; then
+        echo "-"
+        return
+    fi
+
+    wifi_name="$(get_macos_wifi_name_from_ipconfig "$wifi_device")"
+
+    if [[ -n "$wifi_name" ]]; then
+        echo "$wifi_name"
+        return
+    fi
+
+    wifi_name="$(get_macos_wifi_name_from_networksetup "$wifi_device")"
+
+    if [[ -n "$wifi_name" ]]; then
+        echo "$wifi_name"
+        return
+    fi
+
+    echo "-"
+}
+
+get_macos_wifi_name_from_ipconfig() {
+    local wifi_device="$1"
+
+    ipconfig getsummary "$wifi_device" 2>/dev/null |
+        awk -F ": " '/SSID/ { print $2; exit }'
+}
+
+get_macos_wifi_name_from_networksetup() {
+    local wifi_device="$1"
+    local wifi_name=""
+
+    wifi_name="$(networksetup -getairportnetwork "$wifi_device" 2>/dev/null |
+        sed 's/^Current Wi-Fi Network: //')"
+
+    if [[ "$wifi_name" == "You are not associated with an AirPort network." ]]; then
+        echo ""
+        return
+    fi
+
+    echo "$wifi_name"
+}
+
+get_macos_local_ip() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "-"
+        return
+    fi
+
+    ipconfig getifaddr "$default_interface" 2>/dev/null || echo "-"
+}
+
+get_macos_gateway() {
+    route -n get default 2>/dev/null |
+        awk '/gateway:/ { print $2; exit }'
+}
+
+get_macos_dns_servers() {
+    scutil --dns 2>/dev/null |
+        awk '/nameserver\[[0-9]+\]/ { print $3 }' |
+        awk '!seen[$0]++' |
+        paste -sd ", " -
+}
+
+get_macos_mac_address() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "-"
+        return
+    fi
+
+    ifconfig "$default_interface" 2>/dev/null |
+        awk '/ether/ { print $2; exit }'
+}
+
+get_macos_default_interface() {
+    route -n get default 2>/dev/null |
+        awk '/interface:/ { print $2; exit }'
+}
+
+get_macos_wifi_device() {
+    networksetup -listallhardwareports 2>/dev/null |
+        awk '
+            /Hardware Port: Wi-Fi/ {
+                getline
+                print $2
+                exit
+            }
+
+            /Hardware Port: AirPort/ {
+                getline
+                print $2
+                exit
+            }
+        '
+}
+
+get_linux_connection_type() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "Unknown"
+        return
+    fi
+
+    if [[ -d "/sys/class/net/$default_interface/wireless" ]]; then
+        echo "Wi-Fi"
+        return
+    fi
+
+    echo "Ethernet"
+}
+
+get_linux_wifi_name() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "-"
+        return
+    fi
+
+    if command_exists iwgetid; then
+        iwgetid -r "$default_interface" 2>/dev/null || echo "-"
+        return
+    fi
+
+    if command_exists nmcli; then
+        nmcli -t -f active,ssid dev wifi 2>/dev/null |
+            awk -F ":" '$1 == "yes" { print $2; exit }'
+        return
+    fi
+
+    echo "-"
+}
+
+get_linux_local_ip() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "-"
+        return
+    fi
+
+    ip -4 addr show "$default_interface" 2>/dev/null |
+        awk '/inet / { print $2 }' |
+        cut -d "/" -f 1 |
+        head -n 1
+}
+
+get_linux_gateway() {
+    ip route 2>/dev/null |
+        awk '/^default/ { print $3; exit }'
+}
+
+get_linux_dns_servers() {
+    if command_exists resolvectl; then
+        resolvectl dns 2>/dev/null |
+            sed 's/^.*: //' |
+            tr ' ' '\n' |
+            awk '!seen[$0]++' |
+            paste -sd ", " -
+        return
+    fi
+
+    if [[ -f /etc/resolv.conf ]]; then
+        awk '/^nameserver/ { print $2 }' /etc/resolv.conf |
+            awk '!seen[$0]++' |
+            paste -sd ", " -
+        return
+    fi
+
+    echo "-"
+}
+
+get_linux_mac_address() {
+    local default_interface=""
+
+    default_interface="$(get_default_interface)"
+
+    if [[ -z "$default_interface" ]]; then
+        echo "-"
+        return
+    fi
+
+    if [[ -f "/sys/class/net/$default_interface/address" ]]; then
+        cat "/sys/class/net/$default_interface/address"
+        return
+    fi
+
+    echo "-"
+}
+
+get_linux_default_interface() {
+    ip route 2>/dev/null |
+        awk '/^default/ { print $5; exit }'
+}
+
+main "$@"
