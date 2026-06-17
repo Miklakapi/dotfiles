@@ -220,6 +220,57 @@ Host github.com
   IdentitiesOnly yes
 ```
 
+## Project workflow
+
+This setup is project-oriented rather than workspace-oriented.
+
+Global commands from this repository are available everywhere after running `./run bin`.
+When a project is opened with `tmuxs`, it gets its own tmux session and project-specific environment.
+
+A project can define local automation files:
+
+| File            | Purpose                                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.tmux-session` | Runs when a new tmux session is created for the project. It can create windows, start development servers, open editors, or prepare the project environment. |
+| `.tmux-close`   | Runs before `tmuxk` kills the project session. It can stop containers, shut down background processes, or clean up local resources.                          |
+| `.tmux-ignore`  | Excludes the project from the `tmuxs` project picker.                                                                                                        |
+
+When `tmuxs` opens a project, it also checks for a local `./bin` directory.
+If it exists, it is added to `PATH` only inside that tmux session.
+
+This gives each project its own commands without making them globally available.
+
+Example project layout:
+
+```text
+my-project/
+  bin/
+    dev
+    test-api
+  .tmux-session
+  .tmux-close
+```
+
+Example `.tmux-session`:
+
+```bash
+#!/usr/bin/env bash
+
+tmux rename-window editor
+tmux send-keys "nvim" C-m
+
+tmux new-window -n server
+tmux send-keys "npm run dev" C-m
+```
+
+Example `.tmux-close`:
+
+```bash
+#!/usr/bin/env bash
+
+docker compose down
+```
+
 ## Test Ubuntu setup
 
 Build test image:
