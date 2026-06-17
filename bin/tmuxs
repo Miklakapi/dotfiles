@@ -112,6 +112,10 @@ find_projects_in_dir() {
     fi
 
     while IFS= read -r project; do
+        if is_tmux_ignored_project "$project"; then
+            continue
+        fi
+
         format_project "$project" "$open_sessions"
     done < <(find "$project_dir" -mindepth 1 -maxdepth 1 -type d)
 }
@@ -124,7 +128,17 @@ format_project_if_valid() {
         return
     fi
 
+    if is_tmux_ignored_project "$project"; then
+        return
+    fi
+
     format_project "$project" "$open_sessions"
+}
+
+is_tmux_ignored_project() {
+    local project="$1"
+
+    [[ -e "$project/.tmux-ignore" ]]
 }
 
 format_project() {
