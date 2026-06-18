@@ -75,22 +75,23 @@ After running:
 
 they are available from anywhere in the terminal.
 
-| Command         | Usage                                | Description                                                                                                        |
-| --------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `kill-port`     | `kill-port 3000`                     | Kills processes listening on a given port.                                                                         |
-| `port-info`     | `port-info 3000`                     | Shows processes listening on a given port.                                                                         |
-| `net-info`      | `net-info`                           | Shows current network status, connection type, IP addresses, gateway, DNS, and MAC address.                        |
-| `ensure-docker` | `ensure-docker`                      | Ensures Docker is running; starts Docker Desktop on macOS or shows a Linux start command.                          |
-| `repo-update`   | `repo-update`                        | Updates clean Git repositories one level below the current directory and reports repositories that need attention. |
-| `repo-clone`    | `repo-clone [query]`                 | Finds one of your GitHub repositories, clones it if needed, and opens it with `tmuxs`.                             |
-| `repo-connect`  | `repo-connect <repo>`                | Connects the current Git repository to a GitHub remote and pushes the current branch when possible.                |
-| `backup`        | `backup <file-or-directory>`         | Creates a timestamped copy of a file or directory next to the original.                                            |
-| `serve`         | `serve [path] [port]`                | Serves a file or directory over HTTP using `uv` or `python3`.                                                      |
-| `prod-preview`  | `prod-preview [--previous [number]]` | Shows commits and a summary of changes that will reach production.                                                 |
-| `ssh-host`      | `ssh-host`                           | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                  |
-| `search`        | `search [query]`                     | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.  |
-| `tmuxs`         | `tmuxs [project-path]`               | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.             |
-| `tmuxk`         | `tmuxk`                              | Selects one or more tmux sessions with `fzf` and kills them, running project `.tmux-close` scripts when available. |
+| Command         | Usage                                     | Description                                                                                                        |
+| --------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `kill-port`     | `kill-port 3000`                          | Kills processes listening on a given port.                                                                         |
+| `port-info`     | `port-info 3000`                          | Shows processes listening on a given port.                                                                         |
+| `net-info`      | `net-info`                                | Shows current network status, connection type, IP addresses, gateway, DNS, and MAC address.                        |
+| `ensure-docker` | `ensure-docker`                           | Ensures Docker is running; starts Docker Desktop on macOS or shows a Linux start command.                          |
+| `repo-update`   | `repo-update`                             | Updates clean Git repositories one level below the current directory and reports repositories that need attention. |
+| `repo-clone`    | `repo-clone [query]`                      | Finds one of your GitHub repositories, clones it if needed, and opens it with `tmuxs`.                             |
+| `repo-connect`  | `repo-connect <repo>`                     | Connects the current Git repository to a GitHub remote and pushes the current branch when possible.                |
+| `backup`        | `backup <file-or-directory>`              | Creates a timestamped copy of a file or directory next to the original.                                            |
+| `serve`         | `serve [path] [port]`                     | Serves a file or directory over HTTP using `uv` or `python3`.                                                      |
+| `prod-preview`  | `prod-preview [--previous [number]]`      | Shows commits and a summary of changes that will reach production.                                                 |
+| `ssh-host`      | `ssh-host`                                | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                  |
+| `search`        | `search [query]`                          | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.  |
+| `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.             |
+| `tmuxk`         | `tmuxk`                                   | Selects one or more tmux sessions with `fzf` and kills them, running project `.tmux-close` scripts when available. |
+| `repo-tag`      | `repo-tag <major\|minor\|patch\|version>` | Creates or updates a Git tag, pushes the current branch, and pushes the tag to the remote.                         |
 
 ### `repo-clone`
 

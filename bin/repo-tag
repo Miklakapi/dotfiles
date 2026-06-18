@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local version_type="$1"
+
+    if [[ -z "$version_type" ]]; then
+        show_usage
+        return 1
+    fi
+
+    require_command git
+    require_git_repository
+    require_clean_worktree
+
+    local branch
+    local remote
+    local latest_tag
+    local next_tag
+
+    branch="$(get_current_branch)"
+    remote="$(get_remote_name)"
+    latest_tag="$(get_latest_tag)"
+    next_tag="$(resolve_next_tag "$version_type" "$latest_tag")"
+
+    create_or_update_tag "$next_tag"
+    push_branch "$remote" "$branch"
+    push_tag "$remote" "$next_tag"
+
+    echo "Tag pushed: $next_tag"
+}
+
+show_usage() {
+    cat >&2 <<EOF
+Usage: repo-tag <major|minor|patch|version>
+
+Examples:
+  repo-tag patch
+  repo-tag minor
+  repo-tag major
+  repo-tag 1.2.3
+  repo-tag v1.2.3
+EOF
+}
+
+require_git_repository() {
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "Not inside a git repository" >&2
+        return 1
+    fi
+}
+
+require_clean_worktree() {
+    if [[ -n "$(git status --porcelain)" ]]; then
+        echo "Working tree is not clean. Commit or stash changes first." >&2
+        return 1
+    fi
+}
+
+get_current_branch() {
+    git branch --show-current
+}
+
+get_remote_name() {
+    if git remote get-url origin >/dev/null 2>&1; then
+        echo "origin"
+        return
+    fi
+
+    local remote
+    remote="$(git remote | head -n 1)"
+
+    if [[ -z "$remote" ]]; then
+        echo "No git remote found" >&2
+        return 1
+    fi
+
+    echo "$remote"
+}
+
+get_latest_tag() {
+    git tag --sort=-v:refname | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1
+}
+
+resolve_next_tag() {
+    local version_type="$1"
+    local latest_tag="$2"
+
+    case "$version_type" in
+    major | minor | patch)
+        bump_tag "$version_type" "$latest_tag"
+        ;;
+    v[0-9]*.[0-9]*.[0-9]*)
+        echo "$version_type"
+        ;;
+    [0-9]*.[0-9]*.[0-9]*)
+        echo "v$version_type"
+        ;;
+    *)
+        echo "Invalid version: use major, minor, patch or version like 1.2.3" >&2
+        return 1
+        ;;
+    esac
+}
+
+bump_tag() {
+    local version_type="$1"
+    local latest_tag="$2"
+
+    if [[ -z "$latest_tag" ]]; then
+        latest_tag="v0.0.0"
+    fi
+
+    local version
+    version="${latest_tag#v}"
+
+    local major
+    local minor
+    local patch
+
+    IFS="." read -r major minor patch <<<"$version"
+
+    case "$version_type" in
+    major)
+        major=$((major + 1))
+        minor=0
+        patch=0
+        ;;
+    minor)
+        minor=$((minor + 1))
+        patch=0
+        ;;
+    patch)
+        patch=$((patch + 1))
+        ;;
+    esac
+
+    echo "v$major.$minor.$patch"
+}
+
+create_or_update_tag() {
+    local tag="$1"
+
+    if git rev-parse "$tag" >/dev/null 2>&1; then
+        git tag -f -a "$tag" -m "$tag"
+        return
+    fi
+
+    git tag -a "$tag" -m "$tag"
+}
+
+push_branch() {
+    local remote="$1"
+    local branch="$2"
+
+    if [[ -z "$branch" ]]; then
+        echo "Cannot detect current branch" >&2
+        return 1
+    fi
+
+    git push "$remote" "$branch"
+}
+
+push_tag() {
+    local remote="$1"
+    local tag="$2"
+
+    git push --force "$remote" "refs/tags/$tag"
+}
+
+main "$@"
