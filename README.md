@@ -82,7 +82,7 @@ they are available from anywhere in the terminal.
 | `net-info`      | `net-info`                                | Shows current network status, connection type, IP addresses, gateway, DNS, and MAC address.                        |
 | `ensure-docker` | `ensure-docker`                           | Ensures Docker is running; starts Docker Desktop on macOS or shows a Linux start command.                          |
 | `repo-update`   | `repo-update`                             | Updates clean Git repositories one level below the current directory and reports repositories that need attention. |
-| `repo-clone`    | `repo-clone [query]`                      | Finds one of your GitHub repositories, clones it if needed, and opens it with `tmuxs`.                             |
+| `repo-clone`    | `repo-clone [query\|git-url]`             | Finds one of your GitHub repositories or clones a direct Git URL, then opens it with `tmuxs`.                      |
 | `repo-connect`  | `repo-connect <repo>`                     | Connects the current Git repository to a GitHub remote and pushes the current branch when possible.                |
 | `backup`        | `backup <file-or-directory>`              | Creates a timestamped copy of a file or directory next to the original.                                            |
 | `serve`         | `serve [path] [port]`                     | Serves a file or directory over HTTP using `uv` or `python3`.                                                      |
