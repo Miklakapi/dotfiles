@@ -25,6 +25,12 @@ main() {
 
     branch="$(get_current_branch)"
     remote="$(get_remote_name)"
+
+    if is_npm_project; then
+        release_npm_project "$version_type" "$remote" "$branch"
+        return
+    fi
+
     latest_tag="$(get_latest_tag)"
     next_tag="$(resolve_next_tag "$version_type" "$latest_tag")"
 
@@ -152,6 +158,26 @@ create_or_update_tag() {
     fi
 
     git tag -a "$tag" -m "$tag"
+}
+
+is_npm_project() {
+    [[ -f package.json ]]
+}
+
+release_npm_project() {
+    local version_type="$1"
+    local remote="$2"
+    local branch="$3"
+    local tag
+
+    require_command npm
+
+    tag="$(npm version "$version_type")"
+
+    push_branch "$remote" "$branch"
+    push_tag "$remote" "$tag"
+
+    echo "NPM version pushed: $tag"
 }
 
 push_branch() {
