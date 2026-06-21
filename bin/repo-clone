@@ -20,8 +20,20 @@ main() {
     fi
 
     require_dependencies
-    require_config
+    require_repo_clone_dir
     prepare_clone_dir
+
+    if is_git_url "$query"; then
+        repo_url="$query"
+        repo_name="$(get_repo_name_from_url "$repo_url")"
+        project_dir="$(get_project_dir "$repo_name")"
+
+        clone_repo_if_needed "$repo_url" "$project_dir"
+        open_project "$project_dir"
+        return
+    fi
+
+    require_github_owner
 
     selected="$(select_repo "$query")"
 
@@ -38,12 +50,14 @@ main() {
 }
 
 show_usage() {
-    echo "Usage: repo-clone [query]"
+    echo "Usage: repo-clone [query|git-url]"
     echo
     echo "Examples:"
     echo "  repo-clone"
     echo "  repo-clone dotfiles"
     echo "  repo-clone api"
+    echo "  repo-clone ssh://git@192.168.1.2:30009/Kacper/ESP-Bedroom.git"
+    echo "  repo-clone git@github.com:Miklakapi/dotfiles.git"
     echo
     echo "Required config:"
     echo '  export GITHUB_OWNER="Miklakapi"'
@@ -87,6 +101,12 @@ require_repo_clone_dir() {
 
 prepare_clone_dir() {
     mkdir -p "$REPO_CLONE_DIR"
+}
+
+is_git_url() {
+    local value="$1"
+
+    [[ "$value" =~ ^(git@|ssh://|https://|http://).+ ]]
 }
 
 select_repo() {
@@ -151,6 +171,18 @@ get_repo_url() {
     local selected="$1"
 
     echo "$selected" | cut -f2
+}
+
+get_repo_name_from_url() {
+    local repo_url="$1"
+    local repo_name=""
+
+    repo_name="${repo_url%/}"
+    repo_name="${repo_name##*/}"
+    repo_name="${repo_name##*:}"
+    repo_name="${repo_name%.git}"
+
+    echo "$repo_name"
 }
 
 get_project_dir() {
