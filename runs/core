@@ -16,21 +16,66 @@ PACKAGES=(
     parallel
     tree
     bat
+    eza
+)
+
+BREW_PACKAGES=(
+    fd
+)
+
+APT_PACKAGES=(
+    fd-find
 )
 
 main() {
     install_core_packages
+    install_platform_packages
     configure_bat_shell
+    configure_fd_shell
+    configure_eza_shell
 }
 
 install_core_packages() {
     install_packages "${PACKAGES[@]}"
 }
 
+install_platform_packages() {
+    if command_exists brew; then
+        install_brew_packages "${BREW_PACKAGES[@]}"
+        return
+    fi
+
+    if command_exists apt; then
+        install_apt_packages "${APT_PACKAGES[@]}"
+        return
+    fi
+
+    echo "Could not install platform packages. Missing supported package manager: brew or apt"
+    exit 1
+}
+
 configure_bat_shell() {
     append_zsh_block "bat" <<'EOF'
 if command -v batcat >/dev/null 2>&1 && ! command -v bat >/dev/null 2>&1; then
     alias bat="batcat"
+fi
+EOF
+}
+
+configure_fd_shell() {
+    append_zsh_block "fd" <<'EOF'
+if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
+    alias fd="fdfind"
+fi
+EOF
+}
+
+configure_eza_shell() {
+    append_zsh_block "eza" <<'EOF'
+if command -v eza >/dev/null 2>&1; then
+    alias ls="eza --icons --group-directories-first"
+    alias ll="eza -la --icons --git --group-directories-first"
+    alias lt="eza --tree --icons"
 fi
 EOF
 }
