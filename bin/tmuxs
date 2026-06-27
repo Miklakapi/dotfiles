@@ -74,7 +74,7 @@ select_project() {
                 --delimiter=$'\t' \
                 --with-nth=2,3 \
                 --layout=reverse \
-                --header="󰓩 open tmux session | 󰊢 git repo | 󰒓 local .tmux-session | 󰣖 local ./bin"
+                --header="󰓩 open tmux session | 󰊢 git repo | 󰒓 .mkdev/tmux-session | 󰣖 local ./bin"
     )"
 
     echo "${selected##*$'\t'}"
@@ -182,7 +182,7 @@ has_git_repo() {
 has_local_session_config() {
     local project="$1"
 
-    [[ -x "$project/.tmux-session" ]]
+    [[ -x "$project/.mkdev/tmux-session" ]]
 }
 
 has_local_bin() {

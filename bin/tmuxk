@@ -127,22 +127,22 @@ run_tmux_close_if_needed() {
         return
     fi
 
-    close_script="$project_root/.tmux-close"
+    close_script="$project_root/.mkdev/tmux-close"
 
     if [[ ! -f "$close_script" ]]; then
         return
     fi
 
     if [[ ! -x "$close_script" ]]; then
-        echo ".tmux-close exists but is not executable:" >&2
+        echo ".mkdev/tmux-close exists but is not executable:" >&2
         echo "  $close_script" >&2
         echo
         echo "Run:" >&2
-        echo "  chmod +x .tmux-close" >&2
+        echo "  chmod +x .mkdev/tmux-close" >&2
         return 1
     fi
 
-    echo "Running .tmux-close for session: $session_name"
+    echo "Running .mkdev/tmux-close for session: $session_name"
 
     (
         cd "$project_root"

@@ -2,7 +2,7 @@
 
 set -e
 
-local_init="./.tmux-session"
+local_init="./.mkdev/tmux-session"
 global_init="$(command -v .tmux-session || true)"
 
 main() {
@@ -30,7 +30,7 @@ run_global_init() {
 
 show_missing_init_error() {
     echo "No tmux init script found." >&2
-    echo "Create .tmux-session in current directory or add global .tmux-session to PATH." >&2
+    echo "Create .mkdev/tmux-session in current directory or add global .tmux-session to PATH." >&2
 }
 
 main "$@"
