@@ -12,6 +12,7 @@ main() {
     configure_zsh_prompt
     configure_zsh_colors
     configure_zsh_completion
+    configure_zsh_suffix_aliases
 }
 
 install_zsh() {
@@ -82,6 +83,61 @@ compinit
 
 zstyle ':completion:*' menu select
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+EOF
+}
+
+configure_zsh_suffix_aliases() {
+    append_zsh_block "zsh suffix aliases" <<'EOF'
+_dotfiles_bat_json() {
+    local file="$1"
+
+    jq . "$file" | bat --language json --file-name "$file"
+}
+
+alias -s c='nvim'
+alias -s cc='nvim'
+alias -s cpp='nvim'
+alias -s cs='nvim'
+alias -s css='nvim'
+alias -s go='nvim'
+alias -s h='nvim'
+alias -s hpp='nvim'
+alias -s java='nvim'
+alias -s js='nvim'
+alias -s jsx='nvim'
+alias -s kt='nvim'
+alias -s lua='nvim'
+alias -s php='nvim'
+alias -s py='nvim'
+alias -s rb='nvim'
+alias -s rs='nvim'
+alias -s scss='nvim'
+alias -s sh='nvim'
+alias -s sql='nvim'
+alias -s ts='nvim'
+alias -s tsx='nvim'
+alias -s zsh='nvim'
+
+alias -s conf='bat'
+alias -s config='bat'
+alias -s csv='bat'
+alias -s env='bat'
+alias -s gitignore='bat'
+alias -s ini='bat'
+alias -s lock='bat'
+alias -s log='bat'
+alias -s md='bat'
+alias -s toml='bat'
+alias -s tsv='bat'
+alias -s txt='bat'
+alias -s xml='bat'
+alias -s yaml='bat'
+alias -s yml='bat'
+
+alias -s json='_dotfiles_bat_json'
+
+alias -s htm='serve'
+alias -s html='serve'
 EOF
 }
 
