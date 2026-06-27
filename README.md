@@ -56,13 +56,49 @@ Available setup scripts:
 | `nvim`   | Installs Neovim dependencies, downloads Neovim on Ubuntu, clones or updates the Neovim config, and adds `vim=nvim` alias to `~/.zshrc`. |
 | `python` | Installs uv, installs a Python version through uv, and configures uv shell integration in `~/.zshrc`.                                   |
 | `tmux`   | Installs tmux and clipboard support, copies the tmux config, and optionally configures tmux project directories in `~/.zshrc`.          |
-| `zsh`    | Installs Zsh, sets it as the default shell on Linux, and configures prompt, colors, aliases, and completion in `~/.zshrc`.              |
+| `zsh`    | Installs Zsh, sets it as the default shell on Linux, and configures prompt, colors, completion, file suffix aliases, `zmv`, and pager defaults in `~/.zshrc`. |
 
 Preview what would be executed without running the scripts:
 
 ```bash
 ./run --dry
 ./run nvim --dry
+```
+
+### Zsh file helpers
+
+The `zsh` setup configures suffix aliases for opening files directly from the shell.
+
+Examples:
+
+```bash
+README.md
+package.json
+index.html
+main.go
+app.log
+```
+
+Default behavior:
+
+| File type | Action |
+| --------- | ------ |
+| Code files like `.go`, `.js`, `.ts`, `.php`, `.lua`, `.py` | Opens in `nvim` |
+| Text/config files like `.md`, `.txt`, `.yaml`, `.toml`, `.env` | Opens with `bat` |
+| `.json` | Formats with `jq` and previews with `bat` |
+| `.html`, `.htm` | Serves the file directory with `serve` |
+| `.log` | Opens with `less` |
+
+The setup also loads `zmv` for batch renaming in Zsh:
+
+```bash
+zmv '(*).log' '$1.txt'
+```
+
+`less` is configured with useful defaults for logs and long output:
+
+```bash
+export LESS='-R -S -i -M'
 ```
 
 ## Commands
