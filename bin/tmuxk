@@ -50,7 +50,23 @@ get_open_sessions() {
 
 kill_sessions() {
     local selected_sessions="$1"
+    local current_session=""
+    local other_sessions=""
     local session_name=""
+
+    current_session="$(get_current_session)"
+
+    while IFS= read -r session_name; do
+        if [[ -z "$session_name" ]]; then
+            continue
+        fi
+
+        if [[ -n "$current_session" && "$session_name" == "$current_session" ]]; then
+            continue
+        fi
+
+        other_sessions+="$session_name"$'\n'
+    done <<<"$selected_sessions"
 
     while IFS= read -r session_name; do
         if [[ -z "$session_name" ]]; then
@@ -58,7 +74,37 @@ kill_sessions() {
         fi
 
         kill_session "$session_name"
+    done <<<"$other_sessions"
+
+    if selected_sessions_include_current_session "$selected_sessions" "$current_session"; then
+        kill_session "$current_session"
+    fi
+}
+
+get_current_session() {
+    if [[ -z "${TMUX:-}" ]]; then
+        return
+    fi
+
+    tmux display-message -p '#S' 2>/dev/null || true
+}
+
+selected_sessions_include_current_session() {
+    local selected_sessions="$1"
+    local current_session="$2"
+    local session_name=""
+
+    if [[ -z "$current_session" ]]; then
+        return 1
+    fi
+
+    while IFS= read -r session_name; do
+        if [[ "$session_name" == "$current_session" ]]; then
+            return 0
+        fi
     done <<<"$selected_sessions"
+
+    return 1
 }
 
 kill_session() {
