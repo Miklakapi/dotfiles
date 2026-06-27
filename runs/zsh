@@ -12,6 +12,7 @@ main() {
     configure_zsh_prompt
     configure_zsh_colors
     configure_zsh_completion
+    configure_zsh_utilities
     configure_zsh_suffix_aliases
 }
 
@@ -83,6 +84,12 @@ compinit
 
 zstyle ':completion:*' menu select
 zstyle ':completion:*' matcher-list 'm:{a-z}={A-Z}'
+EOF
+}
+
+configure_zsh_utilities() {
+    append_zsh_block "zsh utilities" <<'EOF'
+autoload -Uz zmv
 EOF
 }
 
