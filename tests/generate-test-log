@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+
+set -e
+
+log_file="${1:-tests/test-app.log}"
+lines="${2:-5000}"
+
+levels=(
+    "DEBUG"
+    "INFO"
+    "WARN"
+    "ERROR"
+)
+
+messages=(
+    "User login succeeded"
+    "User login failed"
+    "Database query completed"
+    "Cache miss"
+    "Cache hit"
+    "Payment authorization requested"
+    "Payment authorization failed"
+    "HTTP request completed"
+    "Background job started"
+    "Background job finished"
+    "Retrying failed request"
+    "Connection timeout"
+    "Invalid JSON payload"
+    "Rate limit exceeded"
+    "File upload completed"
+)
+
+mkdir -p "$(dirname "$log_file")"
+
+: >"$log_file"
+
+for index in $(seq 1 "$lines"); do
+    level="${levels[$((RANDOM % ${#levels[@]}))]}"
+    message="${messages[$((RANDOM % ${#messages[@]}))]}"
+    user_id="$((1000 + RANDOM % 9000))"
+    request_id="$(uuidgen 2>/dev/null || printf 'request-%06d' "$index")"
+    status="$((200 + RANDOM % 400))"
+    duration="$((10 + RANDOM % 3000))"
+    timestamp="$(date '+%Y-%m-%dT%H:%M:%S')"
+
+    printf '%s level=%s request_id=%s user_id=%s status=%s duration_ms=%s message="%s"\n' \
+        "$timestamp" \
+        "$level" \
+        "$request_id" \
+        "$user_id" \
+        "$status" \
+        "$duration" \
+        "$message" >>"$log_file"
+done
+
+echo "Generated $lines lines:"
+echo "$log_file"

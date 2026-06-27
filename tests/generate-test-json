@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+set -e
+
+json_file="${1:-tests/test-data.json}"
+
+mkdir -p "$(dirname "$json_file")"
+
+cat > "$json_file" <<'JSON'
+{"app":"dotfiles","version":"1.0.0","debug":true,"users":[{"id":1,"name":"Kacper","roles":["admin","developer"]},{"id":2,"name":"Test User","roles":["viewer"]}],"settings":{"theme":"dark","timeout_ms":3000,"features":{"zsh_suffix_aliases":true,"json_preview":true,"html_serve":true}}}
+JSON
+
+echo "Generated:"
+echo "$json_file"

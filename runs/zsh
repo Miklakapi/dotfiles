@@ -90,6 +90,8 @@ EOF
 configure_zsh_utilities() {
     append_zsh_block "zsh utilities" <<'EOF'
 autoload -Uz zmv
+
+export LESS='-R -S -i -M'
 EOF
 }
 
@@ -132,7 +134,7 @@ alias -s env='bat'
 alias -s gitignore='bat'
 alias -s ini='bat'
 alias -s lock='bat'
-alias -s log='bat'
+alias -s log='less'
 alias -s md='bat'
 alias -s toml='bat'
 alias -s tsv='bat'
