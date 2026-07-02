@@ -9,7 +9,7 @@ tmux_config_target="$tmux_config_dir/tmux.conf"
 
 source "$script_dir/lib/common.sh"
 
-main () {
+main() {
     install_tmux
     install_clipboard_dependencies
     copy_tmux_config
@@ -51,13 +51,11 @@ install_clipboard_dependencies() {
 }
 
 copy_tmux_config() {
-    local answer=""
-
     mkdir -p "$tmux_config_dir"
 
     if [[ ! -f "$tmux_config_source" ]]; then
         echo "tmux config source does not exist: $tmux_config_source"
-        exit 1
+        return 1
     fi
 
     if [[ ! -f "$tmux_config_target" ]]; then
@@ -69,18 +67,15 @@ copy_tmux_config() {
 
     echo "tmux config already exists:"
     echo "$tmux_config_target"
-    read -r -p "Overwrite it? [y/N] " answer
 
-    case "$answer" in
-        y|Y|yes|YES)
-            cp "$tmux_config_source" "$tmux_config_target"
-            echo "tmux config overwritten:"
-            echo "$tmux_config_target"
-            ;;
-        *)
-            echo "Existing tmux config was not changed."
-            ;;
-    esac
+    if ask_yes_no "Overwrite it? [y/N] "; then
+        cp "$tmux_config_source" "$tmux_config_target"
+        echo "tmux config overwritten:"
+        echo "$tmux_config_target"
+        return
+    fi
+
+    echo "Existing tmux config was not changed."
 }
 
 configure_tmux_projects() {
@@ -122,4 +117,4 @@ EOF
     echo "source $HOME/.zshrc"
 }
 
-main
+main "$@"

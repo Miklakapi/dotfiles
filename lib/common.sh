@@ -173,22 +173,23 @@ ask_yes_no() {
     local default_answer="${2:-no}"
     local answer=""
 
-    read -r -p "$question" answer
+    while true; do
+        read -r -p "$question" answer
 
-    if [[ -z "$answer" ]]; then
-        answer="$default_answer"
-    fi
+        if [[ -z "$answer" ]]; then
+            answer="$default_answer"
+        fi
 
-    case "$answer" in
-    y | Y | yes | YES)
-        return 0
-        ;;
-    n | N | no | NO)
-        return 1
-        ;;
-    *)
-        echo "Please answer yes or no." >&2
-        return 1
-        ;;
-    esac
+        case "$answer" in
+        y | Y | yes | YES)
+            return 0
+            ;;
+        n | N | no | NO)
+            return 1
+            ;;
+        *)
+            echo "Please answer yes or no." >&2
+            ;;
+        esac
+    done
 }

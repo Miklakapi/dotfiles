@@ -67,7 +67,6 @@ ask_git_config() {
 }
 
 configure_repo_clone() {
-    local answer=""
     local github_owner=""
     local repo_clone_dir=""
 
@@ -76,15 +75,10 @@ configure_repo_clone() {
         return
     fi
 
-    read -r -p "Configure repo-clone? [y/N] " answer
-
-    case "$answer" in
-    y | Y | yes | YES) ;;
-    *)
+    if ! ask_yes_no "Configure repo-clone? [y/N] "; then
         echo "repo-clone config was not changed."
         return
-        ;;
-    esac
+    fi
 
     echo "Enter GitHub username used by repo-clone:"
     echo "Example: Miklakapi"
