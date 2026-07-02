@@ -130,6 +130,7 @@ they are available from anywhere in the terminal.
 | `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.                   |
 | `tmuxk`         | `tmuxk`                                   | Selects one or more tmux sessions with `fzf` and kills them, running project `.mkdev/tmux-close` scripts when available. |
 | `repo-tag`      | `repo-tag <major\|minor\|patch\|version>` | Creates or updates a Git tag, pushes the current branch, and pushes the tag to the remote.                               |
+| `project-new`   | `project-new [project-name]`              | Creates a new empty project in one of `TMUX_PROJECT_DIRS`, optionally initializes Git, and can open it with `tmuxs`.     |
 
 ### `repo-clone`
 
