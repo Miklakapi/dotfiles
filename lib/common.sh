@@ -98,7 +98,7 @@ append_zsh_block() {
         echo "$start_marker"
         cat
         echo "$end_marker"
-    } > "$block_file"
+    } >"$block_file"
 
     if has_zsh_block "$name"; then
         awk -v start_marker="$start_marker" -v end_marker="$end_marker" -v block_file="$block_file" '
@@ -119,9 +119,9 @@ append_zsh_block() {
             !in_block {
                 print
             }
-        ' "$zshrc" > "$temp_file"
+        ' "$zshrc" >"$temp_file"
 
-        cat "$temp_file" > "$zshrc"
+        cat "$temp_file" >"$zshrc"
         rm -f "$temp_file" "$block_file"
 
         echo "$name updated"
@@ -131,7 +131,7 @@ append_zsh_block() {
     {
         echo ""
         cat "$block_file"
-    } >> "$zshrc"
+    } >>"$zshrc"
 
     rm -f "$temp_file" "$block_file"
 
@@ -162,8 +162,33 @@ remove_zsh_line() {
 
     temp_file="$(mktemp)"
 
-    grep -Fxv "$line" "$zshrc" > "$temp_file" || true
+    grep -Fxv "$line" "$zshrc" >"$temp_file" || true
 
-    cat "$temp_file" > "$zshrc"
+    cat "$temp_file" >"$zshrc"
     rm -f "$temp_file"
+}
+
+ask_yes_no() {
+    local question="$1"
+    local default_answer="${2:-no}"
+    local answer=""
+
+    read -r -p "$question" answer
+
+    if [[ -z "$answer" ]]; then
+        answer="$default_answer"
+    fi
+
+    case "$answer" in
+    y | Y | yes | YES)
+        return 0
+        ;;
+    n | N | no | NO)
+        return 1
+        ;;
+    *)
+        echo "Please answer yes or no." >&2
+        return 1
+        ;;
+    esac
 }
