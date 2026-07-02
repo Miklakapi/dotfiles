@@ -1,0 +1,15 @@
+#compdef repo-tag
+
+_repo_tag() {
+    local -a version_types
+
+    version_types=(
+        'major'
+        'minor'
+        'patch'
+    )
+
+    compadd -a version_types
+}
+
+_repo_tag "$@"

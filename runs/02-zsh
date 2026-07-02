@@ -3,6 +3,7 @@
 set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+completions_dir="$script_dir/completions"
 
 source "$script_dir/lib/common.sh"
 
@@ -78,7 +79,9 @@ EOF
 }
 
 configure_zsh_completion() {
-    append_zsh_block "zsh completion" <<'EOF'
+    append_zsh_block "zsh completion" <<EOF
+fpath=("$completions_dir" \$fpath)
+
 autoload -Uz compinit
 compinit
 

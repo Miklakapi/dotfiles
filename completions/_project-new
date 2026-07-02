@@ -1,0 +1,14 @@
+#compdef project-new
+
+_project_new() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'project-new option' options
+}
+
+_project_new "$@"

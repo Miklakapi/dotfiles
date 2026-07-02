@@ -1,0 +1,14 @@
+#compdef cmds
+
+_cmds() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'cmds option' options
+}
+
+_cmds "$@"

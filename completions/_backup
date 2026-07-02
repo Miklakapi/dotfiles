@@ -1,0 +1,7 @@
+#compdef backup
+
+_backup() {
+    _files
+}
+
+_backup "$@"

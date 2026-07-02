@@ -1,0 +1,14 @@
+#compdef repo-connect
+
+_repo_connect() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'repo-connect option' options
+}
+
+_repo_connect "$@"

@@ -1,0 +1,21 @@
+#compdef port-info
+
+_port_info() {
+    local -a ports
+
+    ports=(
+        '3000'
+        '3306'
+        '5173'
+        '5432'
+        '6379'
+        '8000'
+        '8080'
+        '9000'
+        '9200'
+    )
+
+    compadd -a ports
+}
+
+_port_info "$@"

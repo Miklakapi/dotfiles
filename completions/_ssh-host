@@ -1,0 +1,14 @@
+#compdef ssh-host
+
+_ssh_host() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'ssh-host option' options
+}
+
+_ssh_host "$@"

@@ -1,0 +1,14 @@
+#compdef ensure-docker
+
+_ensure_docker() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'ensure-docker option' options
+}
+
+_ensure_docker "$@"

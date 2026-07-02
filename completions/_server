@@ -1,0 +1,37 @@
+#compdef serve
+
+_serve() {
+    local context state line
+    local -a options ports
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    ports=(
+        '3000'
+        '5173'
+        '8000'
+        '8080'
+        '9000'
+    )
+
+    _arguments \
+        '(-h --help)'{-h,--help}'[Show help]' \
+        '1:path:_files' \
+        '2:port:->port' \
+        '*:: :->none'
+
+    case "$state" in
+    port)
+        compadd -a ports
+        ;;
+
+    none)
+        return
+        ;;
+    esac
+}
+
+_serve "$@"

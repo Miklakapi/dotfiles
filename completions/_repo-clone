@@ -1,0 +1,14 @@
+#compdef repo-clone
+
+_repo_clone() {
+    local -a options
+
+    options=(
+        '-h:Show help'
+        '--help:Show help'
+    )
+
+    _describe 'repo-clone option' options
+}
+
+_repo_clone "$@"

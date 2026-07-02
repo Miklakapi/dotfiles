@@ -1,0 +1,66 @@
+#compdef tmuxs
+
+_tmuxs() {
+    local -a projects
+
+    projects=("${(@f)$(_tmuxs_find_projects)}")
+
+    if (( ${#projects[@]} == 0 )); then
+        _files -/
+        return
+    fi
+
+    compadd -a projects
+}
+
+_tmuxs_find_projects() {
+    _tmuxs_find_projects_from_project_dirs
+    _tmuxs_find_projects_from_explicit_projects
+}
+
+_tmuxs_find_projects_from_project_dirs() {
+    local project_dir=""
+    local project=""
+
+    if [[ -z "$TMUX_PROJECT_DIRS" ]]; then
+        return
+    fi
+
+    echo "$TMUX_PROJECT_DIRS" | tr ':' '\n' | while IFS= read -r project_dir; do
+        if [[ ! -d "$project_dir" ]]; then
+            continue
+        fi
+
+        find "$project_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | while IFS= read -r project; do
+            _tmuxs_print_project "$project"
+        done
+    done
+}
+
+_tmuxs_find_projects_from_explicit_projects() {
+    local project=""
+
+    if [[ -z "$TMUX_PROJECTS" ]]; then
+        return
+    fi
+
+    echo "$TMUX_PROJECTS" | tr ':' '\n' | while IFS= read -r project; do
+        _tmuxs_print_project "$project"
+    done
+}
+
+_tmuxs_print_project() {
+    local project="$1"
+
+    if [[ ! -d "$project" ]]; then
+        return
+    fi
+
+    if [[ -e "$project/.tmux-ignore" ]]; then
+        return
+    fi
+
+    echo "$project"
+}
+
+_tmuxs "$@"
