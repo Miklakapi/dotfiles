@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local project_name="${1:-}"
+    local project_base_dir=""
+    local project_dir=""
+
+    if [[ "$project_name" == "-h" || "$project_name" == "--help" ]]; then
+        show_usage
+        return
+    fi
+
+    require_config
+
+    project_name="$(get_project_name "$project_name")"
+    validate_project_name "$project_name"
+
+    project_base_dir="$(select_project_base_dir)"
+    project_dir="$project_base_dir/$project_name"
+
+    create_project_dir "$project_dir"
+    init_git_if_needed "$project_dir"
+    open_project_if_needed "$project_dir"
+}
+
+show_usage() {
+    echo "Usage: project-new [project-name]"
+    echo
+    echo "Examples:"
+    echo "  project-new"
+    echo "  project-new my-project"
+    echo
+    echo "Description:"
+    echo "  Creates an empty project in one of TMUX_PROJECT_DIRS directories."
+    echo "  Optionally initializes git repository."
+    echo "  Optionally opens created project with tmuxs."
+    echo
+    echo "Required config:"
+    echo '  export TMUX_PROJECT_DIRS="$HOME/Code/work:$HOME/Code/personal"'
+}
+
+require_config() {
+    if [[ -n "${TMUX_PROJECT_DIRS:-}" ]]; then
+        return
+    fi
+
+    echo "TMUX_PROJECT_DIRS is not set." >&2
+    echo "Example:" >&2
+    echo '  export TMUX_PROJECT_DIRS="$HOME/Code/work:$HOME/Code/personal"' >&2
+    return 1
+}
+
+get_project_name() {
+    local project_name="$1"
+
+    if [[ -n "$project_name" ]]; then
+        echo "$project_name"
+        return
+    fi
+
+    read -r -p "Project name: " project_name
+    echo "$project_name"
+}
+
+validate_project_name() {
+    local project_name="$1"
+
+    if [[ -n "$project_name" ]]; then
+        return
+    fi
+
+    echo "Project name cannot be empty." >&2
+    return 1
+}
+
+select_project_base_dir() {
+    local project_dirs=()
+    local project_dir=""
+    local selected_index=""
+    local index=1
+
+    IFS=":" read -ra project_dirs <<<"$TMUX_PROJECT_DIRS"
+
+    echo "Where should the project be created?" >&2
+    echo >&2
+
+    for project_dir in "${project_dirs[@]}"; do
+        project_dir="$(expand_path "$project_dir")"
+
+        echo "  $index) $(basename "$project_dir") - $project_dir" >&2
+        index=$((index + 1))
+    done
+
+    echo >&2
+    read -r -p "Select directory: " selected_index
+
+    require_valid_menu_index "$selected_index" "${#project_dirs[@]}"
+
+    project_dir="${project_dirs[$((selected_index - 1))]}"
+    expand_path "$project_dir"
+}
+
+expand_path() {
+    local path="$1"
+
+    path="${path/#\~/$HOME}"
+    path="${path/#\$HOME/$HOME}"
+
+    echo "$path"
+}
+
+require_valid_menu_index() {
+    local selected_index="$1"
+    local max_index="$2"
+
+    if [[ "$selected_index" =~ ^[0-9]+$ && "$selected_index" -ge 1 && "$selected_index" -le "$max_index" ]]; then
+        return
+    fi
+
+    echo "Invalid selection: $selected_index" >&2
+    return 1
+}
+
+create_project_dir() {
+    local project_dir="$1"
+
+    if [[ -e "$project_dir" ]]; then
+        echo "Path already exists:" >&2
+        echo "  $project_dir" >&2
+        return 1
+    fi
+
+    mkdir -p "$project_dir"
+
+    echo "Project created:"
+    echo "  $project_dir"
+}
+
+init_git_if_needed() {
+    local project_dir="$1"
+
+    if ! ask_yes_no "Initialize git repository? [y/N] "; then
+        return
+    fi
+
+    require_command git
+
+    git -C "$project_dir" init
+
+    echo "Git repository initialized."
+}
+
+open_project_if_needed() {
+    local project_dir="$1"
+
+    if ! ask_yes_no "Open project with tmuxs? [Y/n] " "yes"; then
+        return
+    fi
+
+    require_command tmuxs
+
+    tmuxs "$project_dir"
+}
+
+main "$@"
