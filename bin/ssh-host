@@ -82,15 +82,6 @@ ask() {
     echo "$value"
 }
 
-confirm() {
-    local question="$1"
-    local answer=""
-
-    read -r -p "$question [y/N] " answer
-
-    [[ "$answer" == "y" || "$answer" == "Y" ]]
-}
-
 ensure_ssh_files() {
     mkdir -p "$ssh_dir"
     touch "$ssh_config"
@@ -112,7 +103,7 @@ add_global_host_config_if_needed() {
         if is_macos; then
             echo "  UseKeychain yes"
         fi
-    } >> "$ssh_config"
+    } >>"$ssh_config"
 }
 
 has_global_host_config() {
@@ -131,7 +122,7 @@ replace_host_if_needed() {
     echo "  $host"
     echo
 
-    if ! confirm "Replace it?"; then
+    if ! ask_yes_no "Replace it? [y/N] "; then
         echo "Cancelled." >&2
         return 1
     fi
@@ -160,9 +151,9 @@ remove_host_block() {
         !skip {
             print
         }
-    ' "$ssh_config" > "$temp_file"
+    ' "$ssh_config" >"$temp_file"
 
-    cat "$temp_file" > "$ssh_config"
+    cat "$temp_file" >"$ssh_config"
     rm -f "$temp_file"
 }
 
@@ -201,7 +192,7 @@ generate_key_if_needed() {
 
     require_command ssh-keygen
 
-    if ! confirm "Generate new SSH key?"; then
+    if ! ask_yes_no "Generate new SSH key? [y/N] "; then
         echo "Cancelled." >&2
         return 1
     fi
@@ -225,7 +216,7 @@ add_host_block() {
         echo "  User $user"
         echo "  IdentityFile $config_key_path"
         echo "  IdentitiesOnly yes"
-    } >> "$ssh_config"
+    } >>"$ssh_config"
 }
 
 format_key_path_for_config() {
