@@ -46,7 +46,7 @@ Available setup scripts:
 
 | Script   | Description                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bin`    | Adds custom dotfiles commands from `bin/` to `PATH` in `~/.zshrc` and installs `lsof` if needed.                                                              |
+| `bin`    | Adds custom dotfiles commands from `bin/` to `PATH`, enables Zsh completions from `completions/`, and installs `lsof` if needed.                              |
 | `core`   | Installs common CLI tools used by the rest of the setup.                                                                                                      |
 | `docker` | Installs Docker on Ubuntu using the official Docker repository and adds the current user to the `docker` group.                                               |
 | `fonts`  | Installs JetBrains Mono Nerd Font using Homebrew on macOS or downloads it manually on Linux.                                                                  |
@@ -107,11 +107,13 @@ Custom commands are stored in the `bin/` directory.
 
 After running:
 
-```
+```bash
 ./run bin
 ```
 
 they are available from anywhere in the terminal.
+
+Zsh completions for supported commands are stored in `completions/` and loaded automatically by the setup.
 
 | Command         | Usage                                     | Description                                                                                                              |
 | --------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -332,4 +334,3 @@ Remove test image:
 ```bash
 docker rmi dotfiles-ubuntu
 ```
-
