@@ -23,7 +23,13 @@ install_bin_dependencies() {
 
 configure_bin_path() {
     append_zsh_block "bin" <<EOF
-export PATH="$bin_dir:\$PATH"
+case ":\$PATH:" in
+    *":$bin_dir:"*)
+        ;;
+    *)
+        export PATH="$bin_dir:\$PATH"
+        ;;
+esac
 EOF
 }
 

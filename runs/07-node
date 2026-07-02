@@ -6,7 +6,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 source "$script_dir/lib/common.sh"
 
-main () {
+main() {
     remove_nvm
     install_fnm
     configure_fnm_shell
@@ -43,9 +43,9 @@ remove_nvm_from_file() {
         $0 ~ /bash_completion/ && $0 ~ /nvm/ { next }
         $0 ~ /\.nvm/ { next }
         { print }
-    ' "$file" > "$temp_file"
+    ' "$file" >"$temp_file"
 
-    cat "$temp_file" > "$file"
+    cat "$temp_file" >"$file"
     rm -f "$temp_file"
 }
 
@@ -79,12 +79,59 @@ configure_fnm_shell() {
     if command_exists apt; then
         append_zsh_block "node" <<'EOF'
 export PATH="$HOME/.local/share/fnm:$PATH"
+
+_dotfiles_clean_fnm_path() {
+    local clean_path=""
+    local path_part=""
+
+    for path_part in "${(@s.:.)PATH}"; do
+        case "$path_part" in
+            */.local/state/fnm_multishells/*/bin)
+                continue
+                ;;
+        esac
+
+        if [[ -z "$clean_path" ]]; then
+            clean_path="$path_part"
+            continue
+        fi
+
+        clean_path="$clean_path:$path_part"
+    done
+
+    export PATH="$clean_path"
+}
+
+_dotfiles_clean_fnm_path
 eval "$(fnm env --use-on-cd)"
 EOF
         return
     fi
 
     append_zsh_block "node" <<'EOF'
+_dotfiles_clean_fnm_path() {
+    local clean_path=""
+    local path_part=""
+
+    for path_part in "${(@s.:.)PATH}"; do
+        case "$path_part" in
+            */.local/state/fnm_multishells/*/bin)
+                continue
+                ;;
+        esac
+
+        if [[ -z "$clean_path" ]]; then
+            clean_path="$path_part"
+            continue
+        fi
+
+        clean_path="$clean_path:$path_part"
+    done
+
+    export PATH="$clean_path"
+}
+
+_dotfiles_clean_fnm_path
 eval "$(fnm env --use-on-cd)"
 EOF
 }
