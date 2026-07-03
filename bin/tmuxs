@@ -248,12 +248,19 @@ configure_session_project_env() {
     local session_name="$1"
     local selected="$2"
     local project_bin="$selected/bin"
+    local project_completions="$selected/completions"
     local current_path=""
 
     current_path="$(get_session_path "$session_name")"
     current_path="$(create_project_clean_path "$project_bin" "$current_path")"
 
     tmux set-environment -t "$session_name" TMUX_PROJECT_ROOT "$selected"
+
+    if [[ -d "$project_completions" ]]; then
+        tmux set-environment -t "$session_name" TMUX_PROJECT_COMPLETIONS "$project_completions"
+    else
+        tmux set-environment -u -t "$session_name" TMUX_PROJECT_COMPLETIONS 2>/dev/null || true
+    fi
 
     if [[ ! -d "$project_bin" ]]; then
         tmux set-environment -u -t "$session_name" TMUX_PROJECT_BIN 2>/dev/null || true
@@ -352,10 +359,12 @@ run_session_setup() {
     local target_pane="$1"
     local selected="$2"
     local project_bin="$selected/bin"
+    local project_completions="$selected/completions"
     local clean_path=""
     local final_path=""
     local escaped_selected=""
     local escaped_project_bin=""
+    local escaped_project_completions=""
     local escaped_final_path=""
     local escaped_tmux_session_command=""
 
@@ -363,19 +372,30 @@ run_session_setup() {
 
     printf -v escaped_selected "%q" "$selected"
     printf -v escaped_project_bin "%q" "$project_bin"
+    printf -v escaped_project_completions "%q" "$project_completions"
     printf -v escaped_tmux_session_command "%q" "$tmux_session_command"
 
     if [[ -d "$project_bin" ]]; then
         final_path="$(prepend_to_path "$project_bin" "$clean_path")"
         printf -v escaped_final_path "%q" "$final_path"
 
-        tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; export TMUX_PROJECT_BIN=$escaped_project_bin; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
+        if [[ -d "$project_completions" ]]; then
+            tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; export TMUX_PROJECT_BIN=$escaped_project_bin; export TMUX_PROJECT_COMPLETIONS=$escaped_project_completions; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
+            return
+        fi
+
+        tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; export TMUX_PROJECT_BIN=$escaped_project_bin; unset TMUX_PROJECT_COMPLETIONS; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
         return
     fi
 
     printf -v escaped_final_path "%q" "$clean_path"
 
-    tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; unset TMUX_PROJECT_BIN; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
+    if [[ -d "$project_completions" ]]; then
+        tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; unset TMUX_PROJECT_BIN; export TMUX_PROJECT_COMPLETIONS=$escaped_project_completions; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
+        return
+    fi
+
+    tmux send-keys -t "$target_pane" "export TMUX_PROJECT_ROOT=$escaped_selected; unset TMUX_PROJECT_BIN; unset TMUX_PROJECT_COMPLETIONS; export PATH=$escaped_final_path; $escaped_tmux_session_command && clear" C-m
 }
 
 main "$@"
