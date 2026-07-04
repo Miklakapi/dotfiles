@@ -278,10 +278,10 @@ A project can define local automation files:
 | `.mkdev/tmux-close`   | Runs before `tmuxk` kills the project session. It can stop containers, shut down background processes, or clean up local resources.                          |
 | `.tmux-ignore`        | Excludes the project from the `tmuxs` project picker.                                                                                                        |
 
-When `tmuxs` opens a project, it also checks for a local `./bin` directory.
-If it exists, it is added to `PATH` only inside that tmux session.
+When `tmuxs` opens a project, it also checks for local `./bin` and `./completions` directories.
+If they exist, project commands and completions are loaded only inside that tmux session.
 
-This gives each project its own commands without making them globally available.
+This gives each project its own commands and completions without making them globally available.
 
 Example project layout:
 
@@ -290,6 +290,8 @@ my-project/
   bin/
     dev
     test-api
+  completions/
+    _dev
   .mkdev/
     tmux-session
     tmux-close
