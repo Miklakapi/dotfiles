@@ -49,6 +49,9 @@ require_existing_path() {
 serve_directory() {
     local path="$1"
     local port="$2"
+    local url="http://localhost:$port"
+
+    open_browser "$url"
 
     if command_exists uv; then
         serve_directory_with_uv "$path" "$port"
@@ -62,6 +65,29 @@ serve_directory() {
 
     echo "uv or python3 is required" >&2
     return 1
+}
+
+open_browser() {
+    local url="$1"
+
+    (
+        sleep 0.5
+
+        if command_exists xdg-open; then
+            xdg-open "$url" >/dev/null 2>&1
+            return
+        fi
+
+        if command_exists open; then
+            open "$url" >/dev/null 2>&1
+            return
+        fi
+
+        if command_exists cmd.exe; then
+            cmd.exe /c start "" "$url" >/dev/null 2>&1
+            return
+        fi
+    ) &
 }
 
 serve_directory_with_uv() {
