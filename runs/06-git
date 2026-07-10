@@ -67,36 +67,34 @@ ask_git_config() {
 }
 
 configure_repo_clone() {
-    local github_owner=""
-    local repo_clone_dir=""
-
-    if has_zsh_block "git"; then
-        echo "git zsh config is already configured"
-        return
-    fi
+    local github_owner="${GITHUB_OWNER:-}"
+    local new_github_owner=""
 
     if ! ask_yes_no "Configure repo-clone? [y/N] "; then
         echo "repo-clone config was not changed."
         return
     fi
 
+    if [[ -n "$github_owner" ]]; then
+        echo "Current GitHub username: $github_owner"
+    fi
+
     echo "Enter GitHub username used by repo-clone:"
-    echo "Example: Miklakapi"
-    read -r -p "GITHUB_OWNER: " github_owner
+    echo "Leave empty to keep the current value."
+    read -r -p "GITHUB_OWNER: " new_github_owner
 
-    echo "Enter directory where repo-clone should clone repositories:"
-    echo 'Example: $HOME/Code/personal'
-    read -r -p "REPO_CLONE_DIR: " repo_clone_dir
+    if [[ -n "$new_github_owner" ]]; then
+        github_owner="$new_github_owner"
+    fi
 
-    if [[ -z "$github_owner" && -z "$repo_clone_dir" ]]; then
-        echo "No repo-clone config provided."
+    if [[ -z "$github_owner" ]]; then
+        echo "GITHUB_OWNER was not provided."
         echo "Skipping."
         return
     fi
 
     append_zsh_block "git" <<EOF
 export GITHUB_OWNER="$github_owner"
-export REPO_CLONE_DIR="$repo_clone_dir"
 EOF
 
     echo "git zsh config saved to $HOME/.zshrc"

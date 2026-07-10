@@ -168,6 +168,45 @@ remove_zsh_line() {
     rm -f "$temp_file"
 }
 
+select_numbered_option() {
+    local question="$1"
+    local options=()
+    local choice=""
+    local index=""
+
+    shift
+    options=("$@")
+
+    if [[ "${#options[@]}" -eq 0 ]]; then
+        echo "No options available." >&2
+        return 1
+    fi
+
+    if [[ "${#options[@]}" -eq 1 ]]; then
+        echo "${options[0]}"
+        return
+    fi
+
+    while true; do
+        echo "$question" >&2
+
+        for index in "${!options[@]}"; do
+            printf "  %d) %s\n" "$((index + 1))" "${options[$index]}" >&2
+        done
+
+        echo >&2
+        read -r -p "Choice: " choice
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] &&
+            ((choice >= 1 && choice <= ${#options[@]})); then
+            echo "${options[$((choice - 1))]}"
+            return
+        fi
+
+        echo "Please enter a number between 1 and ${#options[@]}." >&2
+    done
+}
+
 ask_yes_no() {
     local question="$1"
     local default_answer="${2:-no}"

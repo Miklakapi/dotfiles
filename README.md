@@ -50,7 +50,7 @@ Available setup scripts:
 | `core`   | Installs common CLI tools used by the rest of the setup.                                                                                                      |
 | `docker` | Installs Docker on Ubuntu using the official Docker repository and adds the current user to the `docker` group.                                               |
 | `fonts`  | Installs JetBrains Mono Nerd Font using Homebrew on macOS or downloads it manually on Linux.                                                                  |
-| `git`    | Installs Git, applies global Git defaults, asks for missing user details, and optionally configures `repo-clone` environment variables.                       |
+| `git`    | Installs Git, applies global Git defaults, asks for missing user details, and optionally configures the GitHub owner used by `repo-clone`.                    |
 | `golang` | Installs Go using Homebrew on macOS or the official Go tarball on Ubuntu, then adds Go paths to `~/.zshrc`.                                                   |
 | `node`   | Removes old nvm configuration, installs fnm, configures it in `~/.zshrc`, and installs the latest Node.js version.                                            |
 | `nvim`   | Installs Neovim dependencies, downloads Neovim on Ubuntu, clones or updates the Neovim config, and adds `vim=nvim` alias to `~/.zshrc`.                       |
@@ -115,34 +115,42 @@ they are available from anywhere in the terminal.
 
 Zsh completions for supported commands are stored in `completions/` and loaded automatically by the setup.
 
-| Command         | Usage                                     | Description                                                                                                              |
-| --------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `kill-port`     | `kill-port 3000`                          | Kills processes listening on a given port.                                                                               |
-| `port-info`     | `port-info 3000`                          | Shows processes listening on a given port.                                                                               |
-| `net-info`      | `net-info`                                | Shows current network status, connection type, IP addresses, gateway, DNS, and MAC address.                              |
-| `ensure-docker` | `ensure-docker`                           | Ensures Docker is running; starts Docker Desktop on macOS or shows a Linux start command.                                |
-| `repo-update`   | `repo-update`                             | Updates clean Git repositories one level below the current directory and reports repositories that need attention.       |
-| `repo-clone`    | `repo-clone [query\|git-url]`             | Finds one of your GitHub repositories or clones a direct Git URL, then opens it with `tmuxs`.                            |
-| `repo-connect`  | `repo-connect <repo>`                     | Connects the current Git repository to a GitHub remote and pushes the current branch when possible.                      |
-| `backup`        | `backup <file-or-directory>`              | Creates a timestamped copy of a file or directory next to the original.                                                  |
-| `serve`         | `serve [path] [port]`                     | Serves a file or directory over HTTP using `uv` or `python3`.                                                            |
-| `prod-preview`  | `prod-preview [--previous [number]]`      | Shows commits and a summary of changes that will reach production.                                                       |
-| `ssh-host`      | `ssh-host`                                | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                        |
-| `search`        | `search [query]`                          | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.        |
-| `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.                   |
-| `tmuxk`         | `tmuxk`                                   | Selects one or more tmux sessions with `fzf` and kills them, running project `.mkdev/tmux-close` scripts when available. |
-| `repo-tag`      | `repo-tag <major\|minor\|patch\|version>` | Creates or updates a Git tag, pushes the current branch, and pushes the tag to the remote.                               |
-| `project-new`   | `project-new [project-name]`              | Creates a new empty project in one of `TMUX_PROJECT_DIRS`, optionally initializes Git, and can open it with `tmuxs`.     |
-| `cmds`          | `cmds`                                    | Shows available project and global commands. Project commands are listed first and highlighted with a different color.   |
+| Command         | Usage                                     | Description                                                                                                                |
+| --------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `kill-port`     | `kill-port 3000`                          | Kills processes listening on a given port.                                                                                 |
+| `port-info`     | `port-info 3000`                          | Shows processes listening on a given port.                                                                                 |
+| `net-info`      | `net-info`                                | Shows current network status, connection type, IP addresses, gateway, DNS, and MAC address.                                |
+| `ensure-docker` | `ensure-docker`                           | Ensures Docker is running; starts Docker Desktop on macOS or shows a Linux start command.                                  |
+| `repo-update`   | `repo-update`                             | Updates clean Git repositories one level below the current directory and reports repositories that need attention.         |
+| `repo-clone`    | `repo-clone [query\|git-url]`             | Finds one of your GitHub repositories or clones a direct Git URL, asks for a target directory, then opens it with `tmuxs`. |
+| `repo-connect`  | `repo-connect <repo>`                     | Connects the current Git repository to a GitHub remote and pushes the current branch when possible.                        |
+| `backup`        | `backup <file-or-directory>`              | Creates a timestamped copy of a file or directory next to the original.                                                    |
+| `serve`         | `serve [path] [port]`                     | Serves a file or directory over HTTP using `uv` or `python3`.                                                              |
+| `prod-preview`  | `prod-preview [--previous [number]]`      | Shows commits and a summary of changes that will reach production.                                                         |
+| `ssh-host`      | `ssh-host`                                | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                          |
+| `search`        | `search [query]`                          | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.          |
+| `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.                     |
+| `tmuxk`         | `tmuxk`                                   | Selects one or more tmux sessions with `fzf` and kills them, running project `.mkdev/tmux-close` scripts when available.   |
+| `repo-tag`      | `repo-tag <major\|minor\|patch\|version>` | Creates or updates a Git tag, pushes the current branch, and pushes the tag to the remote.                                 |
+| `project-new`   | `project-new [project-name]`              | Creates a new empty project in one of `TMUX_PROJECT_DIRS`, optionally initializes Git, and can open it with `tmuxs`.       |
+| `cmds`          | `cmds`                                    | Shows available project and global commands. Project commands are listed first and highlighted with a different color.     |
 
 ### `repo-clone`
 
-Finds repositories from your GitHub account, lets you select one with `fzf`, clones it if needed, and opens it with `tmuxs`.
+Finds repositories from your GitHub account, lets you select one with `fzf`, or accepts a direct Git URL.
 
-It uses the `GITHUB_OWNER` and `REPO_CLONE_DIR` variables configured by:
+After selecting the repository, it asks which directory from `TMUX_PROJECT_DIRS` should be used, clones the repository if needed, and opens it with `tmuxs`.
+
+It uses the `GITHUB_OWNER` variable configured by:
 
 ```bash
 ./run git
+```
+
+Clone directories are read from `TMUX_PROJECT_DIRS`, configured by:
+
+```bash
+./run tmux
 ```
 
 <p align="center">

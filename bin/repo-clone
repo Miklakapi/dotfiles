@@ -8,10 +8,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$script_dir/lib/common.sh"
 
 main() {
-    local query="$1"
+    local query="${1:-}"
     local selected=""
     local repo_name=""
     local repo_url=""
+    local clone_dir=""
     local project_dir=""
 
     if [[ "$query" == "-h" || "$query" == "--help" ]]; then
@@ -20,30 +21,28 @@ main() {
     fi
 
     require_dependencies
-    require_repo_clone_dir
-    prepare_clone_dir
+    require_project_dirs
 
     if is_git_url "$query"; then
         repo_url="$query"
         repo_name="$(get_repo_name_from_url "$repo_url")"
-        project_dir="$(get_project_dir "$repo_name")"
+    else
+        require_github_owner
 
-        clone_repo_if_needed "$repo_url" "$project_dir"
-        open_project "$project_dir"
-        return
+        selected="$(select_repo "$query")"
+
+        if [[ -z "$selected" ]]; then
+            return
+        fi
+
+        repo_name="$(get_repo_name "$selected")"
+        repo_url="$(get_repo_url "$selected")"
     fi
 
-    require_github_owner
+    clone_dir="$(select_clone_dir)"
+    prepare_clone_dir "$clone_dir"
 
-    selected="$(select_repo "$query")"
-
-    if [[ -z "$selected" ]]; then
-        return
-    fi
-
-    repo_name="$(get_repo_name "$selected")"
-    repo_url="$(get_repo_url "$selected")"
-    project_dir="$(get_project_dir "$repo_name")"
+    project_dir="$(get_project_dir "$clone_dir" "$repo_name")"
 
     clone_repo_if_needed "$repo_url" "$project_dir"
     open_project "$project_dir"
@@ -56,12 +55,12 @@ show_usage() {
     echo "  repo-clone"
     echo "  repo-clone dotfiles"
     echo "  repo-clone api"
-    echo "  repo-clone ssh://git@192.168.1.2:30009/Kacper/ESP-Bedroom.git"
+    echo "  repo-clone ssh://git@example.com/Kacper/demo-project.git"
     echo "  repo-clone git@github.com:Miklakapi/dotfiles.git"
     echo
     echo "Required config:"
     echo '  export GITHUB_OWNER="Miklakapi"'
-    echo '  export REPO_CLONE_DIR="$HOME/Code/personal"'
+    echo '  export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"'
 }
 
 require_dependencies() {
@@ -72,13 +71,8 @@ require_dependencies() {
     require_command tmuxs
 }
 
-require_config() {
-    require_github_owner
-    require_repo_clone_dir
-}
-
 require_github_owner() {
-    if [[ -n "$GITHUB_OWNER" ]]; then
+    if [[ -n "${GITHUB_OWNER:-}" ]]; then
         return
     fi
 
@@ -88,19 +82,15 @@ require_github_owner() {
     return 1
 }
 
-require_repo_clone_dir() {
-    if [[ -n "$REPO_CLONE_DIR" ]]; then
+require_project_dirs() {
+    if [[ -n "${TMUX_PROJECT_DIRS:-}" ]]; then
         return
     fi
 
-    echo "REPO_CLONE_DIR is not set." >&2
+    echo "TMUX_PROJECT_DIRS is not set." >&2
     echo "Example:" >&2
-    echo 'export REPO_CLONE_DIR="$HOME/Code/personal"' >&2
+    echo 'export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"' >&2
     return 1
-}
-
-prepare_clone_dir() {
-    mkdir -p "$REPO_CLONE_DIR"
 }
 
 is_git_url() {
@@ -185,10 +175,27 @@ get_repo_name_from_url() {
     echo "$repo_name"
 }
 
-get_project_dir() {
-    local repo_name="$1"
+select_clone_dir() {
+    local project_dirs=()
 
-    echo "$REPO_CLONE_DIR/$repo_name"
+    IFS=":" read -ra project_dirs <<<"$TMUX_PROJECT_DIRS"
+
+    select_numbered_option \
+        "Select clone directory:" \
+        "${project_dirs[@]}"
+}
+
+prepare_clone_dir() {
+    local clone_dir="$1"
+
+    mkdir -p "$clone_dir"
+}
+
+get_project_dir() {
+    local clone_dir="$1"
+    local repo_name="$2"
+
+    echo "$clone_dir/$repo_name"
 }
 
 clone_repo_if_needed() {
