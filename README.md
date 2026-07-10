@@ -129,6 +129,7 @@ Zsh completions for supported commands are stored in `completions/` and loaded a
 | `prod-preview`  | `prod-preview [--previous [number]]`      | Shows commits and a summary of changes that will reach production.                                                         |
 | `ssh-host`      | `ssh-host`                                | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                          |
 | `search`        | `search [query]`                          | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.          |
+| `find-file`     | `find-file [options] [directory] [query]` | Searches files by name or path with `fd`, previews them with `bat`, and opens the selected file in your editor.            |
 | `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.                     |
 | `tmuxk`         | `tmuxk`                                   | Selects one or more tmux sessions with `fzf` and kills them, running project `.mkdev/tmux-close` scripts when available.   |
 | `repo-tag`      | `repo-tag <major\|minor\|patch\|version>` | Creates or updates a Git tag, pushes the current branch, and pushes the tag to the remote.                                 |
@@ -166,6 +167,28 @@ It updates results as you type, shows a highlighted preview on the right, and op
 <p align="center">
   <img src="assets/search.gif" alt="search demo">
 </p>
+
+### `find-file`
+
+Interactive file search powered by `fd`, `fzf`, and `bat`.
+
+It searches files by name or path, shows a preview of the selected file on the right, and opens it in `$VISUAL`, `$EDITOR`, `nvim`, or `vim`.
+
+By default, it respects ignore rules such as `.gitignore`.
+
+Use `--all` to include hidden and ignored files while still excluding `.git`:
+
+```bash
+find-file --all
+```
+
+A directory can be passed without changing the current working directory:
+
+```bash
+find-file ./packages
+find-file ./packages controller
+find-file --all ./packages
+```
 
 ### `tmuxs`
 

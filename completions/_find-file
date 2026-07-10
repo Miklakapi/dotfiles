@@ -1,0 +1,28 @@
+#compdef find-file
+
+_find-file() {
+    local context state line
+
+    _arguments \
+        '(-a --all)'{-a,--all}'[Show hidden and ignored files]' \
+        '(-h --help)'{-h,--help}'[Show help]' \
+        '1:directory or query:->first_argument' \
+        '2:query:->query' \
+        '*:: :->none'
+
+    case "$state" in
+    first_argument)
+        _files -/
+        ;;
+
+    query)
+        return
+        ;;
+
+    none)
+        return
+        ;;
+    esac
+}
+
+_find-file "$@"

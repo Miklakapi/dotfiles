@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+source "$script_dir/lib/common.sh"
+
+main() {
+    local show_all="0"
+    local search_dir="."
+    local query=""
+
+    parse_arguments "$@"
+
+    show_all="$PARSED_SHOW_ALL"
+    search_dir="$PARSED_SEARCH_DIR"
+    query="$PARSED_QUERY"
+
+    require_dependencies
+    require_search_dir "$search_dir"
+
+    find_file "$search_dir" "$query" "$show_all"
+}
+
+show_usage() {
+    echo "Usage: find-file [options] [directory] [query]"
+    echo
+    echo "Options:"
+    echo "  -a, --all    Show hidden and ignored files"
+    echo "  -h, --help   Show this help"
+    echo
+    echo "Examples:"
+    echo "  find-file"
+    echo "  find-file controller"
+    echo "  find-file ./packages"
+    echo "  find-file ./packages controller"
+    echo "  find-file --all"
+    echo "  find-file --all ./packages controller"
+}
+
+parse_arguments() {
+    local positional=()
+    local argument=""
+
+    PARSED_SHOW_ALL="0"
+    PARSED_SEARCH_DIR="."
+    PARSED_QUERY=""
+
+    while [[ $# -gt 0 ]]; do
+        argument="$1"
+        shift
+
+        case "$argument" in
+        -a | --all)
+            PARSED_SHOW_ALL="1"
+            ;;
+        -h | --help)
+            show_usage
+            exit 0
+            ;;
+        --)
+            positional+=("$@")
+            break
+            ;;
+        -*)
+            echo "Unknown option: $argument" >&2
+            echo "Run 'find-file --help' for usage." >&2
+            exit 1
+            ;;
+        *)
+            positional+=("$argument")
+            ;;
+        esac
+    done
+
+    parse_positional_arguments "${positional[@]}"
+}
+
+parse_positional_arguments() {
+    local first_argument="${1:-}"
+
+    if [[ -n "$first_argument" && -d "$first_argument" ]]; then
+        PARSED_SEARCH_DIR="$first_argument"
+        shift
+
+        PARSED_QUERY="$*"
+        return
+    fi
+
+    PARSED_QUERY="$*"
+}
+
+require_dependencies() {
+    require_command fd
+    require_command fzf
+    require_command bat
+}
+
+require_search_dir() {
+    local search_dir="$1"
+
+    if [[ -d "$search_dir" ]]; then
+        return
+    fi
+
+    echo "Directory does not exist:" >&2
+    echo "  $search_dir" >&2
+    return 1
+}
+
+find_file() {
+    local search_dir="$1"
+    local query="$2"
+    local show_all="$3"
+    local selected=""
+
+    selected="$(
+        list_files "$search_dir" "$show_all" |
+            fzf \
+                --layout=reverse \
+                --query="$query" \
+                --preview='bat --style=numbers --color=always -- {}' \
+                --preview-window='right:60%:wrap'
+    )" || true
+
+    if [[ -z "$selected" ]]; then
+        return
+    fi
+
+    open_file "$selected"
+}
+
+list_files() {
+    local search_dir="$1"
+    local show_all="$2"
+    local fd_options=(
+        --type
+        f
+        --follow
+        --exclude
+        .git
+    )
+
+    if [[ "$show_all" == "1" ]]; then
+        fd_options+=(
+            --hidden
+            --no-ignore
+        )
+    fi
+
+    fd "${fd_options[@]}" . "$search_dir"
+}
+
+open_file() {
+    local file="$1"
+    local editor=""
+
+    editor="$(get_editor_command)"
+
+    if [[ -z "$editor" ]]; then
+        echo "No supported editor found." >&2
+        echo "Selected file:" >&2
+        echo "  $file" >&2
+        return 1
+    fi
+
+    run_editor "$editor" "$file"
+}
+
+get_editor_command() {
+    if [[ -n "${VISUAL:-}" ]]; then
+        echo "$VISUAL"
+        return
+    fi
+
+    if [[ -n "${EDITOR:-}" ]]; then
+        echo "$EDITOR"
+        return
+    fi
+
+    if command_exists nvim; then
+        echo "nvim"
+        return
+    fi
+
+    if command_exists vim; then
+        echo "vim"
+        return
+    fi
+
+    echo ""
+}
+
+run_editor() {
+    local editor="$1"
+    local file="$2"
+    local editor_command=()
+
+    read -r -a editor_command <<<"$editor"
+
+    "${editor_command[@]}" "$file"
+}
+
+main "$@"
