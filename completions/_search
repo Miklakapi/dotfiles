@@ -1,0 +1,28 @@
+#compdef search
+
+_search() {
+    local context state line
+
+    _arguments \
+        '(-a --all)'{-a,--all}'[Search hidden and ignored files]' \
+        '(-h --help)'{-h,--help}'[Show help]' \
+        '1:directory or query:->first_argument' \
+        '2:query:->query' \
+        '*:: :->none'
+
+    case "$state" in
+    first_argument)
+        _files -/
+        ;;
+
+    query)
+        return
+        ;;
+
+    none)
+        return
+        ;;
+    esac
+}
+
+_search "$@"

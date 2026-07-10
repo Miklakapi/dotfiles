@@ -7,37 +7,157 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$script_dir/lib/common.sh"
 
 main() {
-    local query="$1"
+    local show_all="0"
+    local search_dir="."
+    local query=""
 
+    parse_arguments "$@"
+
+    show_all="$PARSED_SHOW_ALL"
+    search_dir="$PARSED_SEARCH_DIR"
+    query="$PARSED_QUERY"
+
+    require_dependencies
+    require_search_dir "$search_dir"
+
+    search_content "$search_dir" "$query" "$show_all"
+}
+
+show_usage() {
+    echo "Usage: search [options] [directory] [query]"
+    echo
+    echo "Options:"
+    echo "  -a, --all    Search hidden and ignored files"
+    echo "  -h, --help   Show this help"
+    echo
+    echo "Examples:"
+    echo "  search"
+    echo "  search controller"
+    echo "  search ./packages"
+    echo "  search ./packages controller"
+    echo "  search --all"
+    echo "  search --all ./packages controller"
+}
+
+parse_arguments() {
+    local positional=()
+    local argument=""
+
+    PARSED_SHOW_ALL="0"
+    PARSED_SEARCH_DIR="."
+    PARSED_QUERY=""
+
+    while [[ $# -gt 0 ]]; do
+        argument="$1"
+        shift
+
+        case "$argument" in
+        -a | --all)
+            PARSED_SHOW_ALL="1"
+            ;;
+        -h | --help)
+            show_usage
+            exit 0
+            ;;
+        --)
+            positional+=("$@")
+            break
+            ;;
+        -*)
+            echo "Unknown option: $argument" >&2
+            echo "Run 'search --help' for usage." >&2
+            exit 1
+            ;;
+        *)
+            positional+=("$argument")
+            ;;
+        esac
+    done
+
+    parse_positional_arguments "${positional[@]}"
+}
+
+parse_positional_arguments() {
+    local first_argument="${1:-}"
+
+    if [[ -n "$first_argument" && -d "$first_argument" ]]; then
+        PARSED_SEARCH_DIR="$first_argument"
+        shift
+
+        PARSED_QUERY="$*"
+        return
+    fi
+
+    PARSED_QUERY="$*"
+}
+
+require_dependencies() {
     require_command rg
     require_command fzf
     require_command bat
-
-    search_content "$query"
 }
 
-get_editor_command() {
-    if [[ -n "$VISUAL" ]]; then
-        echo "$VISUAL"
+require_search_dir() {
+    local search_dir="$1"
+
+    if [[ -d "$search_dir" ]]; then
         return
     fi
 
-    if [[ -n "$EDITOR" ]]; then
-        echo "$EDITOR"
-        return
+    echo "Directory does not exist:" >&2
+    echo "  $search_dir" >&2
+    return 1
+}
+
+search_content() {
+    local search_dir="$1"
+    local query="$2"
+    local show_all="$3"
+    local rg_command=""
+    local result=""
+
+    rg_command="$(create_rg_command "$search_dir" "$show_all")"
+
+    result="$(
+        fzf \
+            --disabled \
+            --layout=reverse \
+            --query="$query" \
+            --bind "start:reload:$rg_command || true" \
+            --bind "change:reload:$rg_command || true" \
+            --delimiter=":" \
+            --preview='bat --style=numbers --color=always --highlight-line {2} -- {1}' \
+            --preview-window="right:60%:wrap" \
+            --phony
+    )" || true
+
+    open_search_result "$result"
+}
+
+create_rg_command() {
+    local search_dir="$1"
+    local show_all="$2"
+    local rg_options=(
+        rg
+        --column
+        --line-number
+        --no-heading
+        --color=never
+        --smart-case
+        --follow
+        --glob
+        '!.git/**'
+    )
+
+    if [[ "$show_all" == "1" ]]; then
+        rg_options+=(
+            --hidden
+            --no-ignore
+        )
     fi
 
-    if command_exists nvim; then
-        echo "nvim"
-        return
-    fi
-
-    if command_exists vim; then
-        echo "vim"
-        return
-    fi
-
-    echo ""
+    printf "%q " "${rg_options[@]}"
+    printf "{q} -- %q" "$search_dir"
 }
 
 open_search_result() {
@@ -66,28 +186,42 @@ open_search_result() {
         return
     fi
 
-    "$editor" +"$line" "$file"
+    run_editor "$editor" "$file" "$line"
 }
 
-search_content() {
-    local query="$1"
-    local rg_prefix="rg --column --line-number --no-heading --color=never --smart-case"
-    local result=""
+get_editor_command() {
+    if [[ -n "${VISUAL:-}" ]]; then
+        echo "$VISUAL"
+        return
+    fi
 
-    result="$(
-        fzf \
-            --disabled \
-            --layout=reverse \
-            --query "$query" \
-            --bind "start:reload:$rg_prefix {q} . || true" \
-            --bind "change:reload:$rg_prefix {q} . || true" \
-            --delimiter ":" \
-            --preview "bat --style=numbers --color=always --highlight-line {2} {1}" \
-            --preview-window "right:60%:wrap" \
-            --phony
-    )"
+    if [[ -n "${EDITOR:-}" ]]; then
+        echo "$EDITOR"
+        return
+    fi
 
-    open_search_result "$result"
+    if command_exists nvim; then
+        echo "nvim"
+        return
+    fi
+
+    if command_exists vim; then
+        echo "vim"
+        return
+    fi
+
+    echo ""
+}
+
+run_editor() {
+    local editor="$1"
+    local file="$2"
+    local line="$3"
+    local editor_command=()
+
+    read -r -a editor_command <<<"$editor"
+
+    "${editor_command[@]}" +"$line" "$file"
 }
 
 main "$@"
