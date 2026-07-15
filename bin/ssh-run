@@ -1,0 +1,509 @@
+#!/usr/bin/env bash
+
+set -e
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+global_bin_dir="$script_dir/bin"
+
+mode="auto"
+remote_cwd=""
+use_sudo="0"
+parsed_options_count=0
+
+main() {
+    local host=""
+    local command_name=""
+
+    parse_options "$@"
+    shift "$parsed_options_count"
+
+    if [[ $# -lt 2 ]]; then
+        show_usage >&2
+        return 1
+    fi
+
+    host="$1"
+    command_name="$2"
+    shift 2
+
+    require_command ssh
+
+    case "$mode" in
+    command)
+        run_remote_command \
+            "$host" \
+            "$remote_cwd" \
+            "$use_sudo" \
+            "$command_name" \
+            "$@"
+        ;;
+
+    script)
+        run_local_script \
+            "$host" \
+            "$remote_cwd" \
+            "$use_sudo" \
+            "$command_name" \
+            "$@"
+        ;;
+
+    auto)
+        run_automatically \
+            "$host" \
+            "$remote_cwd" \
+            "$use_sudo" \
+            "$command_name" \
+            "$@"
+        ;;
+    esac
+}
+
+show_usage() {
+    echo "Usage: ssh-run [options] <host> <command-or-script> [arguments...]"
+    echo
+    echo "Runs a command on an SSH host or executes a local script there."
+    echo
+    echo "Options:"
+    echo "  -c, --command       Always run a command available on the server"
+    echo "  -s, --script        Always execute a local script on the server"
+    echo "  -C, --cwd <path>    Run in the selected directory on the server"
+    echo "  -S, --sudo          Run the command or script with sudo"
+    echo "  -h, --help          Show this help"
+    echo
+    echo "Automatic mode executes locally managed scripts when the command is:"
+    echo "  - provided as a local file path"
+    echo "  - available in the dotfiles bin directory"
+    echo "  - available in the active project's bin directory"
+    echo
+    echo "Other commands are executed directly on the server."
+    echo
+    echo "Examples:"
+    echo "  ssh-run production ls -la /var/www"
+    echo "  ssh-run production backup /var/www/project"
+    echo "  ssh-run --cwd /var/www/project production bin/console cache:clear"
+    echo "  ssh-run --script production ./bin/check-project --verbose"
+    echo "  ssh-run --sudo production find /var/log -type f"
+    echo "  ssh-run --sudo --cwd /var/www/project production backup"
+}
+
+parse_options() {
+    parsed_options_count=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+        -c | --command)
+            require_auto_mode "$1"
+            mode="command"
+            ;;
+
+        -s | --script)
+            require_auto_mode "$1"
+            mode="script"
+            ;;
+
+        -C | --cwd)
+            if [[ $# -lt 2 ]]; then
+                echo "Missing path after $1." >&2
+                return 1
+            fi
+
+            remote_cwd="$2"
+
+            shift
+            parsed_options_count=$((parsed_options_count + 1))
+            ;;
+
+        -S | --sudo)
+            use_sudo="1"
+            ;;
+
+        -h | --help)
+            show_usage
+            exit 0
+            ;;
+
+        --)
+            parsed_options_count=$((parsed_options_count + 1))
+            return
+            ;;
+
+        -*)
+            echo "Unknown option: $1" >&2
+            echo >&2
+            show_usage >&2
+
+            return 1
+            ;;
+
+        *)
+            return
+            ;;
+        esac
+
+        shift
+        parsed_options_count=$((parsed_options_count + 1))
+    done
+}
+
+require_auto_mode() {
+    local option="$1"
+
+    if [[ "$mode" == "auto" ]]; then
+        return
+    fi
+
+    echo "Options --command and --script cannot be used together: $option" >&2
+
+    return 1
+}
+
+require_command() {
+    local command_name="$1"
+
+    if command -v "$command_name" >/dev/null 2>&1; then
+        return
+    fi
+
+    echo "Required command is not available: $command_name" >&2
+
+    return 1
+}
+
+run_automatically() {
+    local host="$1"
+    local selected_remote_cwd="$2"
+    local selected_use_sudo="$3"
+    local command_name="$4"
+    local local_script_path=""
+
+    shift 4
+
+    if local_script_path="$(find_local_script "$command_name")"; then
+        run_script_file \
+            "$host" \
+            "$selected_remote_cwd" \
+            "$selected_use_sudo" \
+            "$local_script_path" \
+            "$@"
+
+        return
+    fi
+
+    run_remote_command \
+        "$host" \
+        "$selected_remote_cwd" \
+        "$selected_use_sudo" \
+        "$command_name" \
+        "$@"
+}
+
+run_local_script() {
+    local host="$1"
+    local selected_remote_cwd="$2"
+    local selected_use_sudo="$3"
+    local script_name="$4"
+    local local_script_path=""
+
+    shift 4
+
+    local_script_path="$(resolve_local_script "$script_name")"
+
+    require_readable_script "$local_script_path"
+
+    run_script_file \
+        "$host" \
+        "$selected_remote_cwd" \
+        "$selected_use_sudo" \
+        "$local_script_path" \
+        "$@"
+}
+
+find_local_script() {
+    local command_name="$1"
+    local resolved_path=""
+
+    if [[ "$command_name" == */* ]]; then
+        resolved_path="$(resolve_path_if_file "$command_name" || true)"
+
+        if [[ -n "$resolved_path" ]] && is_readable_script "$resolved_path"; then
+            echo "$resolved_path"
+            return
+        fi
+
+        return 1
+    fi
+
+    resolved_path="$(command -v "$command_name" 2>/dev/null || true)"
+
+    if [[ -z "$resolved_path" || ! -f "$resolved_path" ]]; then
+        return 1
+    fi
+
+    if ! is_managed_script_path "$resolved_path"; then
+        return 1
+    fi
+
+    if ! is_readable_script "$resolved_path"; then
+        return 1
+    fi
+
+    echo "$resolved_path"
+}
+
+resolve_local_script() {
+    local script_name="$1"
+    local resolved_path=""
+
+    if [[ "$script_name" == */* ]]; then
+        resolved_path="$(resolve_path_if_file "$script_name" || true)"
+    else
+        resolved_path="$(command -v "$script_name" 2>/dev/null || true)"
+    fi
+
+    if [[ -z "$resolved_path" ]]; then
+        echo "Local script does not exist or is not available in PATH: $script_name" >&2
+
+        return 1
+    fi
+
+    echo "$resolved_path"
+}
+
+resolve_path_if_file() {
+    local path="$1"
+    local directory=""
+    local filename=""
+
+    if [[ ! -f "$path" ]]; then
+        return 1
+    fi
+
+    directory="$(cd "$(dirname "$path")" && pwd)"
+    filename="$(basename "$path")"
+
+    echo "$directory/$filename"
+}
+
+is_managed_script_path() {
+    local script_path="$1"
+
+    if is_path_inside "$script_path" "$global_bin_dir"; then
+        return 0
+    fi
+
+    if [[ -n "${TMUX_PROJECT_BIN:-}" ]] &&
+        is_path_inside "$script_path" "$TMUX_PROJECT_BIN"; then
+        return 0
+    fi
+
+    return 1
+}
+
+is_path_inside() {
+    local path="$1"
+    local directory="$2"
+
+    [[ "$path" == "$directory"/* ]]
+}
+
+is_readable_script() {
+    local script_path="$1"
+    local first_line=""
+
+    if [[ ! -f "$script_path" || ! -r "$script_path" ]]; then
+        return 1
+    fi
+
+    IFS= read -r first_line <"$script_path" || true
+
+    [[ "$first_line" == '#!'* ]]
+}
+
+require_readable_script() {
+    local script_path="$1"
+
+    if is_readable_script "$script_path"; then
+        return
+    fi
+
+    echo "Local file is not a readable script with a shebang: $script_path" >&2
+
+    return 1
+}
+
+run_remote_command() {
+    local host="$1"
+    local selected_remote_cwd="$2"
+    local selected_use_sudo="$3"
+    local command_name="$4"
+    local remote_command=""
+
+    shift 4
+
+    remote_command="$(
+        build_remote_command \
+            "$selected_remote_cwd" \
+            "$selected_use_sudo" \
+            "$command_name" \
+            "$@"
+    )"
+
+    ssh -t "$host" "$remote_command"
+}
+
+build_remote_command() {
+    local selected_remote_cwd="$1"
+    local selected_use_sudo="$2"
+    local command_name="$3"
+    local command_line=""
+
+    shift 3
+
+    command_line="$(quote_arguments "$command_name" "$@")"
+
+    if [[ "$selected_use_sudo" == "1" ]]; then
+        command_line="sudo -- $command_line"
+    fi
+
+    if [[ -n "$selected_remote_cwd" ]]; then
+        command_line="cd $(shell_quote "$selected_remote_cwd") && $command_line"
+    fi
+
+    echo "$command_line"
+}
+
+run_script_file() {
+    local host="$1"
+    local selected_remote_cwd="$2"
+    local selected_use_sudo="$3"
+    local script_path="$4"
+    local remote_script_path=""
+    local execute_command=""
+    local exit_code=0
+
+    shift 4
+
+    remote_script_path="$(create_remote_script_file "$host")"
+
+    if ! upload_script_file "$host" "$script_path" "$remote_script_path"; then
+        remove_remote_script_file "$host" "$remote_script_path"
+
+        return 1
+    fi
+
+    execute_command="$(
+        build_script_command \
+            "$selected_remote_cwd" \
+            "$selected_use_sudo" \
+            "$remote_script_path" \
+            "$@"
+    )"
+
+    if ssh -t "$host" "$execute_command"; then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
+
+    remove_remote_script_file "$host" "$remote_script_path"
+
+    return "$exit_code"
+}
+
+create_remote_script_file() {
+    local host="$1"
+    local remote_script_path=""
+
+    remote_script_path="$(
+        ssh "$host" \
+            'mktemp "${TMPDIR:-/tmp}/ssh-run.XXXXXX"'
+    )"
+
+    if [[ -z "$remote_script_path" ]]; then
+        echo "Could not create a temporary file on SSH host: $host" >&2
+
+        return 1
+    fi
+
+    echo "$remote_script_path"
+}
+
+upload_script_file() {
+    local host="$1"
+    local script_path="$2"
+    local remote_script_path="$3"
+    local upload_command=""
+
+    upload_command="$(
+        printf \
+            "cat > %s && chmod 700 %s" \
+            "$(shell_quote "$remote_script_path")" \
+            "$(shell_quote "$remote_script_path")"
+    )"
+
+    ssh "$host" "$upload_command" <"$script_path"
+}
+
+build_script_command() {
+    local selected_remote_cwd="$1"
+    local selected_use_sudo="$2"
+    local remote_script_path="$3"
+    local command_line=""
+
+    shift 3
+
+    command_line="bash $(shell_quote "$remote_script_path")"
+
+    if [[ $# -gt 0 ]]; then
+        command_line="$command_line $(quote_arguments "$@")"
+    fi
+
+    if [[ "$selected_use_sudo" == "1" ]]; then
+        command_line="sudo -- $command_line"
+    fi
+
+    if [[ -n "$selected_remote_cwd" ]]; then
+        command_line="cd $(shell_quote "$selected_remote_cwd") && $command_line"
+    fi
+
+    echo "$command_line"
+}
+
+remove_remote_script_file() {
+    local host="$1"
+    local remote_script_path="$2"
+    local remove_command=""
+
+    if [[ -z "$remote_script_path" ]]; then
+        return
+    fi
+
+    remove_command="rm -f -- $(shell_quote "$remote_script_path")"
+
+    ssh "$host" "$remove_command" >/dev/null 2>&1 || true
+}
+
+quote_arguments() {
+    local argument=""
+    local quoted_arguments=""
+
+    for argument in "$@"; do
+        if [[ -n "$quoted_arguments" ]]; then
+            quoted_arguments+=" "
+        fi
+
+        quoted_arguments+="$(shell_quote "$argument")"
+    done
+
+    echo "$quoted_arguments"
+}
+
+shell_quote() {
+    local value="$1"
+
+    value=${value//\'/\'\\\'\'}
+
+    printf "'%s'" "$value"
+}
+
+main "$@"
