@@ -1,0 +1,193 @@
+#compdef ssh-run
+
+_ssh-run() {
+    local context state state_descr line
+    local -a arguments
+
+    arguments=(
+        '(-c --command -s --script)'{-c,--command}'[Always run a command available on the server]'
+        '(-s --script -c --command)'{-s,--script}'[Always execute a local script on the server]'
+        '(-C --cwd)'{-C,--cwd}'[Run in the selected directory on the server]:remote directory:'
+        '(-S --sudo)'{-S,--sudo}'[Run the command or script with sudo]'
+        '(-h --help)'{-h,--help}'[Show help]'
+        '1:SSH host:->host'
+        '2:command or script:->command'
+        '*:command argument:->argument'
+    )
+
+    _arguments -s -S "$arguments[@]"
+
+    case "$state" in
+    host)
+        _ssh_run_complete_hosts
+        ;;
+
+    command)
+        _ssh_run_complete_command
+        ;;
+
+    argument)
+        _ssh_run_complete_command_arguments
+        ;;
+    esac
+}
+
+_ssh_run_complete_hosts() {
+    local ssh_config_path="${HOME}/.ssh/config"
+    local host=""
+    local host_pattern=""
+    local -a hosts
+
+    if [[ ! -r "$ssh_config_path" ]]; then
+        return
+    fi
+
+    while IFS= read -r host_pattern; do
+        for host in ${(z)host_pattern}; do
+            if _ssh_run_is_concrete_host "$host"; then
+                hosts+=("$host")
+            fi
+        done
+    done < <(
+        awk '
+            tolower($1) == "host" {
+                $1 = ""
+                sub(/^[[:space:]]+/, "")
+                print
+            }
+        ' "$ssh_config_path"
+    )
+
+    if (( ${#hosts[@]} == 0 )); then
+        return
+    fi
+
+    hosts=("${(@u)hosts}")
+
+    _describe -t ssh-hosts 'SSH host from ~/.ssh/config' hosts
+}
+
+_ssh_run_is_concrete_host() {
+    local host="$1"
+
+    if [[ -z "$host" ]]; then
+        return 1
+    fi
+
+    if [[ "$host" == \!* ]]; then
+        return 1
+    fi
+
+    if [[ "$host" == *'*'* || "$host" == *'?'* ]]; then
+        return 1
+    fi
+
+    return 0
+}
+
+_ssh_run_complete_command() {
+    if _ssh_run_uses_script_mode; then
+        _ssh_run_complete_scripts
+        return
+    fi
+
+    _command_names -e
+}
+
+_ssh_run_complete_scripts() {
+    _alternative \
+        'commands:local command from PATH:_command_names -e' \
+        'scripts:local script file:_files -g "*(-.)"'
+}
+
+_ssh_run_complete_command_arguments() {
+    local command_index=0
+    local original_current="$CURRENT"
+    local -a original_words
+
+    original_words=("${words[@]}")
+    command_index="$(_ssh_run_find_command_index)"
+
+    if (( command_index == 0 )); then
+        return
+    fi
+
+    if (( CURRENT <= command_index )); then
+        return
+    fi
+
+    words=("${original_words[@][$command_index,-1]}")
+    CURRENT=$((original_current - command_index + 1))
+
+    _normal
+
+    words=("${original_words[@]}")
+    CURRENT="$original_current"
+}
+
+_ssh_run_find_command_index() {
+    local index=2
+    local positional_count=0
+    local stop_options=0
+    local word=""
+
+    while (( index <= ${#words[@]} )); do
+        word="${words[$index]}"
+
+        if (( stop_options == 0 )); then
+            case "$word" in
+            --)
+                stop_options=1
+                index=$((index + 1))
+                continue
+                ;;
+
+            -C | --cwd)
+                index=$((index + 2))
+                continue
+                ;;
+
+            -c | --command | -s | --script | -S | --sudo | -h | --help)
+                index=$((index + 1))
+                continue
+                ;;
+
+            -*)
+                index=$((index + 1))
+                continue
+                ;;
+            esac
+        fi
+
+        positional_count=$((positional_count + 1))
+
+        if (( positional_count == 2 )); then
+            echo "$index"
+            return
+        fi
+
+        index=$((index + 1))
+    done
+
+    echo "0"
+}
+
+_ssh_run_uses_script_mode() {
+    local word=""
+
+    for word in "${words[@]}"; do
+        case "$word" in
+        -s | --script)
+            return 0
+            ;;
+
+        -c | --command)
+            return 1
+            ;;
+        esac
+    done
+
+    return 1
+}
+
+_ssh-run "$@"
