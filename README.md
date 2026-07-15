@@ -128,6 +128,7 @@ Zsh completions for supported commands are stored in `completions/` and loaded a
 | `serve`         | `serve [path] [port]`                     | Serves a file or directory over HTTP using `uv` or `python3`.                                                              |
 | `prod-preview`  | `prod-preview [--previous [number]]`      | Shows commits and a summary of changes that will reach production.                                                         |
 | `ssh-host`      | `ssh-host`                                | Interactively creates an SSH host entry and can generate a new SSH key if needed.                                          |
+| `ssh-run`       | `ssh-run [options] <host> <command-or-script> [arguments...]` | Runs remote commands or temporarily executes local global and project scripts on an SSH host, including the matching `lib/` directory when available. |
 | `search`        | `search [query]`                          | Searches project files with `ripgrep`, previews matches with `bat`, and opens the selected result in your editor.          |
 | `find-file`     | `find-file [options] [directory] [query]` | Searches files by name or path with `fd`, previews them with `bat`, and opens the selected file in your editor.            |
 | `tmuxs`         | `tmuxs [project-path]`                    | Selects a project with `fzf`, opens or switches to its tmux session, and runs project startup scripts.                     |
