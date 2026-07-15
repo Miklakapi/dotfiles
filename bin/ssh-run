@@ -11,7 +11,7 @@ use_sudo="0"
 parsed_options_count=0
 
 active_remote_host=""
-active_remote_script_path=""
+active_remote_directory=""
 
 main() {
     local host=""
@@ -32,6 +32,7 @@ main() {
     shift 2
 
     require_command ssh
+    require_command tar
 
     case "$mode" in
     command)
@@ -64,7 +65,7 @@ main() {
 }
 
 register_cleanup_traps() {
-    trap cleanup_current_remote_script EXIT
+    trap cleanup_current_remote_directory EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
@@ -86,6 +87,9 @@ show_usage() {
     echo "  - provided as a local file path"
     echo "  - available in the dotfiles bin directory"
     echo "  - available in the active project's bin directory"
+    echo
+    echo "For dotfiles and project scripts, the matching lib directory is included"
+    echo "automatically when it exists."
     echo
     echo "Other commands are executed directly on the server."
     echo
@@ -389,18 +393,25 @@ run_script_file() {
     local selected_remote_cwd="$2"
     local selected_use_sudo="$3"
     local script_path="$4"
+    local script_name=""
+    local remote_directory=""
     local remote_script_path=""
     local execute_command=""
     local exit_code=0
 
     shift 4
 
-    remote_script_path="$(create_remote_script_file "$host")"
+    script_name="$(basename "$script_path")"
+    remote_directory="$(create_remote_directory "$host")"
+    remote_script_path="$remote_directory/bin/$script_name"
 
-    set_active_remote_script "$host" "$remote_script_path"
+    set_active_remote_directory "$host" "$remote_directory"
 
-    if ! upload_script_file "$host" "$script_path" "$remote_script_path"; then
-        cleanup_current_remote_script
+    if ! upload_script_bundle \
+        "$host" \
+        "$script_path" \
+        "$remote_directory"; then
+        cleanup_current_remote_directory
 
         return 1
     fi
@@ -409,6 +420,7 @@ run_script_file() {
         build_script_command \
             "$selected_remote_cwd" \
             "$selected_use_sudo" \
+            "$remote_directory" \
             "$remote_script_path" \
             "$@"
     )"
@@ -419,64 +431,112 @@ run_script_file() {
         exit_code=$?
     fi
 
-    cleanup_current_remote_script
+    cleanup_current_remote_directory
 
     return "$exit_code"
 }
 
-set_active_remote_script() {
+set_active_remote_directory() {
     active_remote_host="$1"
-    active_remote_script_path="$2"
+    active_remote_directory="$2"
 }
 
-clear_active_remote_script() {
+clear_active_remote_directory() {
     active_remote_host=""
-    active_remote_script_path=""
+    active_remote_directory=""
 }
 
-create_remote_script_file() {
+create_remote_directory() {
     local host="$1"
-    local remote_script_path=""
+    local remote_directory=""
 
-    remote_script_path="$(
+    remote_directory="$(
         ssh "$host" \
-            'mktemp "${TMPDIR:-/tmp}/ssh-run.XXXXXX"'
+            'mktemp -d "${TMPDIR:-/tmp}/ssh-run.XXXXXX"'
     )"
 
-    if [[ -z "$remote_script_path" ]]; then
-        echo "Could not create a temporary file on SSH host: $host" >&2
+    if [[ -z "$remote_directory" ]]; then
+        echo "Could not create a temporary directory on SSH host: $host" >&2
 
         return 1
     fi
 
-    echo "$remote_script_path"
+    echo "$remote_directory"
 }
 
-upload_script_file() {
+upload_script_bundle() {
     local host="$1"
     local script_path="$2"
-    local remote_script_path="$3"
+    local remote_directory="$3"
+    local script_name=""
+    local local_root_directory=""
+    local local_lib_directory=""
+    local prepare_command=""
     local upload_command=""
+
+    script_name="$(basename "$script_path")"
+    local_root_directory="$(find_script_root_directory "$script_path" || true)"
+
+    prepare_command="$(
+        printf \
+            "mkdir -p %s && cat > %s && chmod 700 %s" \
+            "$(shell_quote "$remote_directory/bin")" \
+            "$(shell_quote "$remote_directory/bin/$script_name")" \
+            "$(shell_quote "$remote_directory/bin/$script_name")"
+    )"
+
+    ssh "$host" "$prepare_command" <"$script_path"
+
+    if [[ -z "$local_root_directory" ]]; then
+        return
+    fi
+
+    local_lib_directory="$local_root_directory/lib"
+
+    if [[ ! -d "$local_lib_directory" ]]; then
+        return
+    fi
 
     upload_command="$(
         printf \
-            "cat > %s && chmod 700 %s" \
-            "$(shell_quote "$remote_script_path")" \
-            "$(shell_quote "$remote_script_path")"
+            "tar -C %s -xf -" \
+            "$(shell_quote "$remote_directory")"
     )"
 
-    ssh "$host" "$upload_command" <"$script_path"
+    tar -C "$local_root_directory" -cf - lib |
+        ssh "$host" "$upload_command"
+}
+
+find_script_root_directory() {
+    local script_path="$1"
+    local project_root_directory=""
+
+    if is_path_inside "$script_path" "$global_bin_dir"; then
+        echo "$script_dir"
+        return
+    fi
+
+    if [[ -n "${TMUX_PROJECT_BIN:-}" ]] &&
+        is_path_inside "$script_path" "$TMUX_PROJECT_BIN"; then
+        project_root_directory="$(cd "$TMUX_PROJECT_BIN/.." && pwd)"
+
+        echo "$project_root_directory"
+        return
+    fi
+
+    return 1
 }
 
 build_script_command() {
     local selected_remote_cwd="$1"
     local selected_use_sudo="$2"
-    local remote_script_path="$3"
+    local remote_directory="$3"
+    local remote_script_path="$4"
     local command_line=""
     local cleanup_line=""
     local wrapped_command=""
 
-    shift 3
+    shift 4
 
     command_line="bash $(shell_quote "$remote_script_path")"
 
@@ -492,36 +552,35 @@ build_script_command() {
         command_line="cd $(shell_quote "$selected_remote_cwd") && $command_line"
     fi
 
-    cleanup_line="exit_code=\$?; rm -f -- $(shell_quote "$remote_script_path"); exit \$exit_code"
-
+    cleanup_line="exit_code=\$?; rm -rf -- $(shell_quote "$remote_directory"); exit \$exit_code"
     wrapped_command="trap $(shell_quote "$cleanup_line") EXIT; $command_line"
 
     echo "$wrapped_command"
 }
 
-cleanup_current_remote_script() {
+cleanup_current_remote_directory() {
     local host="$active_remote_host"
-    local remote_script_path="$active_remote_script_path"
+    local remote_directory="$active_remote_directory"
 
-    if [[ -z "$host" || -z "$remote_script_path" ]]; then
+    if [[ -z "$host" || -z "$remote_directory" ]]; then
         return
     fi
 
-    clear_active_remote_script
+    clear_active_remote_directory
 
-    remove_remote_script_file "$host" "$remote_script_path"
+    remove_remote_directory "$host" "$remote_directory"
 }
 
-remove_remote_script_file() {
+remove_remote_directory() {
     local host="$1"
-    local remote_script_path="$2"
+    local remote_directory="$2"
     local remove_command=""
 
-    if [[ -z "$remote_script_path" ]]; then
+    if [[ -z "$remote_directory" ]]; then
         return
     fi
 
-    remove_command="rm -f -- $(shell_quote "$remote_script_path")"
+    remove_command="rm -rf -- $(shell_quote "$remote_directory")"
 
     ssh "$host" "$remove_command" >/dev/null 2>&1 || true
 }
