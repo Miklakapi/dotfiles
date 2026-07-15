@@ -10,9 +10,14 @@ remote_cwd=""
 use_sudo="0"
 parsed_options_count=0
 
+active_remote_host=""
+active_remote_script_path=""
+
 main() {
     local host=""
     local command_name=""
+
+    register_cleanup_traps
 
     parse_options "$@"
     shift "$parsed_options_count"
@@ -56,6 +61,13 @@ main() {
             "$@"
         ;;
     esac
+}
+
+register_cleanup_traps() {
+    trap cleanup_current_remote_script EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 129' HUP
 }
 
 show_usage() {
@@ -385,8 +397,10 @@ run_script_file() {
 
     remote_script_path="$(create_remote_script_file "$host")"
 
+    set_active_remote_script "$host" "$remote_script_path"
+
     if ! upload_script_file "$host" "$script_path" "$remote_script_path"; then
-        remove_remote_script_file "$host" "$remote_script_path"
+        cleanup_current_remote_script
 
         return 1
     fi
@@ -405,9 +419,19 @@ run_script_file() {
         exit_code=$?
     fi
 
-    remove_remote_script_file "$host" "$remote_script_path"
+    cleanup_current_remote_script
 
     return "$exit_code"
+}
+
+set_active_remote_script() {
+    active_remote_host="$1"
+    active_remote_script_path="$2"
+}
+
+clear_active_remote_script() {
+    active_remote_host=""
+    active_remote_script_path=""
 }
 
 create_remote_script_file() {
@@ -449,6 +473,8 @@ build_script_command() {
     local selected_use_sudo="$2"
     local remote_script_path="$3"
     local command_line=""
+    local cleanup_line=""
+    local wrapped_command=""
 
     shift 3
 
@@ -466,7 +492,24 @@ build_script_command() {
         command_line="cd $(shell_quote "$selected_remote_cwd") && $command_line"
     fi
 
-    echo "$command_line"
+    cleanup_line="exit_code=\$?; rm -f -- $(shell_quote "$remote_script_path"); exit \$exit_code"
+
+    wrapped_command="trap $(shell_quote "$cleanup_line") EXIT; $command_line"
+
+    echo "$wrapped_command"
+}
+
+cleanup_current_remote_script() {
+    local host="$active_remote_host"
+    local remote_script_path="$active_remote_script_path"
+
+    if [[ -z "$host" || -z "$remote_script_path" ]]; then
+        return
+    fi
+
+    clear_active_remote_script
+
+    remove_remote_script_file "$host" "$remote_script_path"
 }
 
 remove_remote_script_file() {
