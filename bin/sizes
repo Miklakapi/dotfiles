@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly TARGET_PATH="${1:-.}"
+
+if [ ! -d "$TARGET_PATH" ]; then
+    echo "Directory does not exist: $TARGET_PATH" >&2
+    exit 1
+fi
+
+find "$TARGET_PATH" \
+    -mindepth 1 \
+    -maxdepth 1 \
+    -print0 |
+    while IFS= read -r -d '' entry; do
+        size_kb="$(du -sk "$entry" 2>/dev/null | awk '{ print $1 }')"
+        name="${entry##*/}"
+
+        if [ -d "$entry" ]; then
+            type_order=1
+            display_name=$'\033[34m'"${name}/"$'\033[0m'
+        elif [ -L "$entry" ]; then
+            type_order=2
+            display_name=$'\033[36m'"${name}@"$'\033[0m'
+        elif [ -x "$entry" ]; then
+            type_order=3
+            display_name=$'\033[32m'"${name}*"$'\033[0m'
+        else
+            type_order=3
+            display_name="$name"
+        fi
+
+        printf "%s\t%s\t%s\t%s\n" \
+            "$type_order" \
+            "$name" \
+            "${size_kb:-0}" \
+            "$display_name"
+    done |
+    sort -t $'\t' -k1,1n -k2,2f |
+    awk -F '\t' '
+    function human_size(size_kb) {
+        if (size_kb >= 1024 * 1024 * 1024) {
+            return sprintf("%.2f TB", size_kb / 1024 / 1024 / 1024)
+        }
+
+        if (size_kb >= 1024 * 1024) {
+            return sprintf("%.2f GB", size_kb / 1024 / 1024)
+        }
+
+        if (size_kb >= 1024) {
+            return sprintf("%.2f MB", size_kb / 1024)
+        }
+
+        return sprintf("%.2f KB", size_kb)
+    }
+
+    {
+        printf "%10s  %s\n", human_size($3), $4
+    }
+'

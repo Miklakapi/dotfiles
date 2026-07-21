@@ -1,0 +1,9 @@
+#compdef sizes
+
+_sizes() {
+    _arguments \
+        '1:directory:_files -/' \
+        '*:: :_nothing'
+}
+
+_sizes "$@"
