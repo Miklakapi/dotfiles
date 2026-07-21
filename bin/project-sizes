@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+set -e
+
+main() {
+    require_projects_config
+
+    find_projects |
+        calculate_project_sizes |
+        sort -t $'\t' -k1,1nr |
+        print_project_sizes
+}
+
+require_projects_config() {
+    if [[ -n "${TMUX_PROJECT_DIRS:-}" || -n "${TMUX_PROJECTS:-}" ]]; then
+        return
+    fi
+
+    echo "TMUX_PROJECT_DIRS or TMUX_PROJECTS is not set." >&2
+    echo "Example:" >&2
+    echo 'export TMUX_PROJECT_DIRS="$HOME/Code/personal:$HOME/Code/work"' >&2
+    echo 'export TMUX_PROJECTS="$HOME/.config/nvim"' >&2
+
+    return 1
+}
+
+find_projects() {
+    local project_dir=""
+    local project=""
+
+    if [[ -n "${TMUX_PROJECT_DIRS:-}" ]]; then
+        IFS=":" read -ra project_dirs <<<"$TMUX_PROJECT_DIRS"
+
+        for project_dir in "${project_dirs[@]}"; do
+            find_projects_in_dir "$project_dir"
+        done
+    fi
+
+    if [[ -n "${TMUX_PROJECTS:-}" ]]; then
+        IFS=":" read -ra projects <<<"$TMUX_PROJECTS"
+
+        for project in "${projects[@]}"; do
+            print_project_if_valid "$project"
+        done
+    fi
+}
+
+find_projects_in_dir() {
+    local project_dir="$1"
+    local project=""
+
+    if [[ ! -d "$project_dir" ]]; then
+        return
+    fi
+
+    while IFS= read -r project; do
+        print_project_if_valid "$project"
+    done < <(find "$project_dir" -mindepth 1 -maxdepth 1 -type d)
+}
+
+print_project_if_valid() {
+    local project="$1"
+
+    if [[ ! -d "$project" ]]; then
+        return
+    fi
+
+    if is_ignored_project "$project"; then
+        return
+    fi
+
+    printf "%s\n" "$project"
+}
+
+is_ignored_project() {
+    local project="$1"
+
+    [[ -e "$project/.tmux-ignore" ]]
+}
+
+calculate_project_sizes() {
+    local project=""
+    local size_kb=""
+
+    while IFS= read -r project; do
+        size_kb="$(calculate_project_size "$project")"
+
+        printf "%s\t%s\n" "$size_kb" "$project"
+    done
+}
+
+calculate_project_size() {
+    local project="$1"
+    local size_kb=""
+
+    size_kb="$(
+        du -skL "$project" 2>/dev/null |
+            awk '{print $1}'
+    )"
+
+    if [[ -z "$size_kb" ]]; then
+        echo "0"
+
+        return
+    fi
+
+    echo "$size_kb"
+}
+
+print_project_sizes() {
+    local size_kb=""
+    local project=""
+    local formatted_size=""
+    local total_size_kb=0
+
+    printf "%-10s %s\n" "SIZE" "PROJECT"
+    printf "%-10s %s\n" "----------" "-------"
+
+    while IFS=$'\t' read -r size_kb project; do
+        formatted_size="$(format_size "$size_kb")"
+        total_size_kb=$((total_size_kb + size_kb))
+
+        printf "%-10s %s\n" "$formatted_size" "$project"
+    done
+
+    printf "\n%-10s %s\n" "$(format_size "$total_size_kb")" "Total"
+}
+
+format_size() {
+    local size_kb="$1"
+
+    awk -v size_kb="$size_kb" '
+        BEGIN {
+            if (size_kb >= 1024 * 1024) {
+                printf "%.2f GB", size_kb / 1024 / 1024
+                exit
+            }
+
+            if (size_kb >= 1024) {
+                printf "%.2f MB", size_kb / 1024
+                exit
+            }
+
+            printf "%d KB", size_kb
+        }
+    '
+}
+
+main "$@"
